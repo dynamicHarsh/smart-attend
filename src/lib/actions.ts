@@ -56,7 +56,8 @@ export const signup = async (values: z.infer<typeof FormSchema>) => {
       return {error:"Invalid fields"}
      }
 
-     const {email,password,username,confirmPassword}=validatedFields.data;
+     const {email,password,username,confirmPassword,role,branch}=validatedFields.data;
+     const userBranch = branch !== undefined ? branch : "";
   
    if(password!==confirmPassword){
     return {error:"Passwords do not Match"};
@@ -67,20 +68,38 @@ export const signup = async (values: z.infer<typeof FormSchema>) => {
       email,
     },
   });
+
   
-  if (existingUser) {
-    return { error: "Email already in Use" };
+ 
+  if(existingUser){
+    return {error:"User Already Exists"};
   }
   const hashedPassword = await bcrypt.hash(password, 10);
 
-  await db.user.create({
+  const newUser=await db.user.create({
     data: {
       username,
       email,
       password: hashedPassword,
+      role
     },
   });
-
+  if (role === "STUDENT") {
+    await db.student.create({
+      data: {
+        userId: newUser.id,
+        branch:userBranch,
+      },
+    });
+  } else if (role === "TEACHER") {
+    await db.teacher.create({
+      data: {
+        userId: newUser.id,
+      },
+    });
+  } else if (role === "ADMIN") {
+    return  {error:"you are not authorized to register as an admin"}
+  }
   //login in user after sign up
   try {
     await signIn("credentials", {

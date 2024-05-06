@@ -1,5 +1,3 @@
-
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -9,14 +7,70 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-
-// Update this according the need of application
 model User {
   id        String   @id @default(uuid())
-  username  String  @unique 
   email     String   @unique
-  password  String?
-  confirmPassword String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  password  String
+  role      Role     @default(STUDENT)
+  username  String
+  student   Student?
+  teacher   Teacher?
+  admin     Admin?
+}
+
+model Student {
+  id        String             @id @default(uuid())
+  user      User               @relation(fields: [userId], references: [id])
+  userId    String             @unique
+  branch    String
+  courses   Course[]           @relation("StudentCourses")
+  attendanceRecords AttendanceRecord[]
+}
+
+model Teacher {
+  id        String             @id @default(uuid())
+  user      User               @relation(fields: [userId], references: [id])
+  userId    String             @unique
+  courses   Course[]           @relation("TeacherCourses")
+  attendanceRecords AttendanceRecord[]
+}
+
+model Admin {
+  id     String @id @default(uuid())
+  user   User   @relation(fields: [userId], references: [id])
+  userId String @unique
+}
+
+model Course {
+  id              String             @id @default(uuid())
+  name            String
+  code            String             @unique
+  session         String
+  teachers        Teacher[]          @relation("TeacherCourses")
+  students        Student[]          @relation("StudentCourses")
+  attendanceRecords AttendanceRecord[]
+}
+
+model AttendanceRecord {
+  id        String            @id @default(uuid())
+  student   Student           @relation(fields: [studentId], references: [id])
+  studentId String
+  course    Course            @relation(fields: [courseId], references: [id])
+  courseId  String
+  date      DateTime          @default(now())
+  status    AttendanceStatus  @default(PRESENT)
+  session   String
+  teacher   Teacher           @relation(fields: [teacherId], references: [id])
+  teacherId String
+}
+
+enum Role {
+  STUDENT
+  TEACHER
+  ADMIN
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
 }
