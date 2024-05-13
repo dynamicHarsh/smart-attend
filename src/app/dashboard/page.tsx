@@ -1,12 +1,14 @@
-import { auth,signOut } from "@/lib/auth"
-import { redirect } from "next/navigation";
-
+import { Button } from "@/components/ui/button";
+import { signOut } from "@/lib/auth"
+import { currentProfile } from "@/lib/currentProfile";
 
 
 const Dashboard =async () => {
-    const session = await auth();
-  return (<div>
-    <div>{JSON.stringify(session)}</div>
+  const user= await currentProfile();
+    
+  return (<div className="ml-2">
+    <div>{JSON.stringify(user)} </div>
+   
     <form
     action={async ()=>{
         "use server";
@@ -15,9 +17,10 @@ const Dashboard =async () => {
         
     }}
     >
-        <button type="submit">
-            SignOut
-        </button>
+      <Button  type="submit">SignOut</Button>
+        
+            
+        
     </form>
     </div>
 
