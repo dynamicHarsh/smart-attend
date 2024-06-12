@@ -27,8 +27,10 @@ import { FormSchema } from "@/lib/Schema";
 import { FormError } from "../Form_error";
 import { FormSuccess } from "../Form_success";
 import { Role } from "@prisma/client";
+import { usePathname } from "next/navigation";
 
 const SignUpForm = () => {
+ 
   const [selectedRole, setSelectedRole] = useState<Role>(Role.STUDENT);
   const [error, setError] = useState<string | undefined>("");
   const [success, setSuccess] = useState<string | undefined>("");
@@ -47,7 +49,8 @@ const SignUpForm = () => {
 
   const onSubmit = (values: z.infer<typeof FormSchema>) => {
     startTransition(() => {
-      signup(values).then((data) => {
+      const pathName=usePathname();
+      signup(values,pathName).then((data) => {
         setError(data?.error);
         setSuccess(data?.success);
       });
@@ -56,16 +59,17 @@ const SignUpForm = () => {
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="w-full">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
         <div className="space-y-2">
           <FormField
             control={form.control}
             name="username"
             render={({ field }) => (
-              <FormItem>
+              <FormItem >
                 <FormLabel>Name</FormLabel>
                 <FormControl>
                   <Input
+                     className="bg-white focus:ring-0 text-black ring-offset-0 focus:ring-offset-0 "
                     disabled={isPending}
                     placeholder="Enter your name"
                     {...field}
@@ -107,7 +111,7 @@ const SignUpForm = () => {
                   defaultValue={field.value}
                 >
                   <FormControl>
-                    <SelectTrigger className="bg-zinc-300/50 border-0 focus:ring-0 text-black ring-offset-0 focus:ring-offset-0 capitalize outline-none">
+                    <SelectTrigger className="  focus:ring-0 text-black ring-offset-0 focus:ring-offset-0 capitalize outline-none">
                       <SelectValue placeholder="Select your role" />
                     </SelectTrigger>
                   </FormControl>
@@ -127,7 +131,7 @@ const SignUpForm = () => {
               </FormItem>
             )}
           />
-          {selectedRole === Role.STUDENT && (
+        
             <FormField
               control={form.control}
               name="branch"
@@ -140,11 +144,11 @@ const SignUpForm = () => {
                       onValueChange={field.onChange}
                       defaultValue={field.value}
                     >
-                      <SelectTrigger className="bg-zinc-300/50 border-0 focus:ring-0 text-black ring-offset-0 focus:ring-offset-0 capitalize outline-none">
+                      <SelectTrigger className="  focus:ring-0 text-black ring-offset-0 focus:ring-offset-0 capitalize outline-none">
                         <SelectValue placeholder="Select your branch" />
                       </SelectTrigger>
                       <SelectContent>
-                        {/* Add your branch options here */}
+                        {/* Add  branch options here */}
                         <SelectItem value="computer">Computer</SelectItem>
                         <SelectItem value="mechanical">Mechanical</SelectItem>
                         {/* ... */}
@@ -155,48 +159,53 @@ const SignUpForm = () => {
                 </FormItem>
               )}
             />
+         
+          <FormField
+          control={form.control}
+          name="password"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Password</FormLabel>
+              <FormControl>
+                <Input
+                  placeholder="Please Enter Password"
+                  {...field}
+                  type="password"
+                  disabled={isPending}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
           )}
-          <FormField
-            control={form.control}
-            name="password"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Password</FormLabel>
-                <FormControl>
-                  <Input
-                    disabled={isPending}
-                    type="password"
-                    placeholder="Enter your password"
-                    {...field}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="confirmPassword"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Re-Enter your password</FormLabel>
-                <FormControl>
-                  <Input
-                    disabled={isPending}
-                    placeholder="Re-Enter your password"
-                    type="password"
-                    {...field}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+        />
+           <FormField
+          control={form.control}
+          name="confirmPassword"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Confirm Password</FormLabel>
+              <FormControl>
+                <Input
+                  placeholder="Please Re-Enter Password"
+                  {...field}
+                  type="password"
+                  disabled={isPending}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
         </div>
         <FormError message={error} />
         <FormSuccess message={success} />
-        <Button className="w-full mt-6" type="submit">
-          Sign up
+        <Button
+          className=" mt-6"
+          type="submit"
+       
+          disabled={isPending}
+        >
+          {isPending ? "Signing up..." : "Sign up"}
         </Button>
       </form>
 

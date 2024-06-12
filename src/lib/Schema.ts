@@ -24,3 +24,11 @@ export const LoginSchema = z.object({
     path: ['confirmPassword'],
     message: 'Password do not match',
   });
+
+  // lib/validations/assign-course-to-teacher.ts
+
+
+export const AssignCourseToTeacherSchema = z.object({
+  department: z.string(),
+  courseId: z.string(),
+});
