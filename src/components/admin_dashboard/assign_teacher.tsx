@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { assignCourseToTeacher, getCoursesForTeacher, getTeachersForCourse } from "@/lib/actions";
+import { assignCourseToTeacher, } from "@/lib/actions";
 import { useState, useTransition } from "react";
 import { FormError } from "../Form_error";
 import { FormSuccess } from "../Form_success";
