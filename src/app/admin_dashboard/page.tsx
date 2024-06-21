@@ -4,7 +4,7 @@ import { currentProfile } from "@/lib/currentProfile"
 import { Role } from "@prisma/client";
 import { redirect } from "next/navigation";
 
-export default async function SettingsProfilePage() {
+export default async function AdminDashboard() {
   const profile= await currentProfile();
 
   if(profile?.role!==Role.ADMIN){

@@ -15,25 +15,14 @@ export const metadata: Metadata = {
 const sidebarNavItems = [
  
   {
-    title: "Account",
-    href: "/admin_dashboard/account",
+    title: "Courses",
+    href: "/dashboard/teacher",
   },
   {
-    title: "Add Course",
-    href: "/admin_dashboard/add_course",
-  },
-  {
-    title: "Assign Teacher",
-    href: "/admin_dashboard/assign_teacher",
-  },
-  {
-    title: "Enroll Students",
-    href: "/admin_dashboard/enroll_students",
-  },
-  {
-    title: "Analytics",
-    href: "/admin_dashboard",
-  },
+    title:"Attendence Records",
+    href:"/dashboard/teacher/attendence_records",
+  }
+ 
 ]
 
 interface SettingsLayoutProps {
@@ -48,9 +37,9 @@ export default async function SettingsLayout({ children }: SettingsLayoutProps) 
       <div className=" space-y-6 p-10 pb-16">
         <div className=" flex justify-between  space-y-0.5 items-center">
           <div>
-          <h2 className="text-2xl font-bold tracking-tight">Admin Dashboard</h2>
+          <h2 className="text-2xl font-bold tracking-tight">Dashboard</h2>
           <p className="text-muted-foreground">
-            Manage Teachers, Students and Courses.
+         Manage Courses and Attendence Records for students
           </p>
           </div>
           <div className="">
@@ -70,7 +59,7 @@ export default async function SettingsLayout({ children }: SettingsLayoutProps) 
           <aside className="-mx-4 lg:w-1/5">
             <SidebarNav items={sidebarNavItems} />
           </aside>
-          <div className="flex-1 lg:max-w-2xl">{children}</div>
+          <div className="flex-1 w-full">{children}</div>
         </div>
       </div>
     </>

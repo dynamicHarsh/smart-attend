@@ -8,7 +8,8 @@ import { signIn } from "./auth";
 import { DEFAULT_LOGIN_REDIRECT,DEFAULT_ADMIN_LOGIN_REDIRECT } from "@/routes";
 import { AuthError } from "next-auth";
 import { AssignCourseToTeacherSchema, FormSchema, LoginSchema } from "./Schema";
-import { Role } from "@prisma/client";
+import { AttendanceStatus, Role } from "@prisma/client";
+import { currentProfile } from "./currentProfile";
 
 
 export const login = async (values: z.infer<typeof LoginSchema>) => {
@@ -64,8 +65,9 @@ export const signup = async (values: z.infer<typeof FormSchema>,path:string) => 
       return {error:"Invalid fields"}
      }
 
-     const {email,password,username,confirmPassword,role,branch}=validatedFields.data;
+     const {email,password,username,confirmPassword,role,branch,registrationNumber}=validatedFields.data;
      const userBranch = branch !== undefined ? branch : "";
+     const regNumber=registrationNumber!==undefined?registrationNumber:"";
   
    if(password!==confirmPassword){
     return {error:"Passwords do not Match"};
@@ -87,7 +89,7 @@ export const signup = async (values: z.infer<typeof FormSchema>,path:string) => 
       username,
       email,
       password: hashedPassword,
-      role
+      role,
     },
   });
   if (role === "STUDENT") {
@@ -95,6 +97,7 @@ export const signup = async (values: z.infer<typeof FormSchema>,path:string) => 
       data: {
         userId: newUser.id,
         branch:userBranch,
+        registrationNumber:regNumber,
       },
     });
   } else if (role === "TEACHER") {
@@ -249,8 +252,15 @@ export const getEnrolledCourses = async (studentName :string) => {
   if (!studentWithCourses) {
     return { error: `Student with name ${studentName} not found` };
   }
+  const simplifiedCourses = studentWithCourses.courses.map(course => ({
+    id:course.id,
+    name: course.name, 
+    code: course.code,
+    session: course.session,
+    department: course.department,
+  }));
    
-  return { courses: studentWithCourses.courses };
+  return { courses: simplifiedCourses };
 };
 
 
@@ -266,12 +276,20 @@ export const getCoursesForTeacher = async (teacherName:string) => {
       courses: true,
     },
   });
+  
 
   if (!teacherWithCourses) {
     return { error: `Teacher with name ${teacherName} not found` };
   }
+  const simplifiedCourses = teacherWithCourses.courses.map(course => ({
+    id:course.id,
+    name: course.name, 
+    code: course.code,
+    session: course.session,
+    department: course.department,
+  }));
    
-  return { courses: teacherWithCourses.courses };
+  return { courses: simplifiedCourses };
 };
 
 export const enrollStudentInCourse = async (values: { studentName: string, teacherName: string, courseName: string }) => {
@@ -286,6 +304,7 @@ export const enrollStudentInCourse = async (values: { studentName: string, teach
       student: true,
     },
   });
+
 
   if (!studentUser || !studentUser.student) {
     return { error: `Student with name ${studentName} not found` };
@@ -332,14 +351,27 @@ export const enrollStudentInCourse = async (values: { studentName: string, teach
   }
 
   // Check if the student is already enrolled in the course
-  const isStudentEnrolled = course.students.some(s => s.id === student.id);
+  const isStudentEnrolled = await db.enrollment.findFirst({
+    where: {
+      studentId: student.id,
+      courseId: course.id,
+      teacherId: teacher.id,
+    },
+  });
 
   if (isStudentEnrolled) {
     return { error: `Student ${studentName} is already enrolled in course ${courseName}` };
   }
 
   // Enroll the student in the course
-  const updatedCourse = await db.course.update({
+  await db.enrollment.create({
+    data: {
+      studentId: student.id,
+      courseId: course.id,
+      teacherId: teacher.id,
+    },
+  });
+   await db.course.update({
     where: {
       id: course.id,
     },
@@ -354,3 +386,220 @@ export const enrollStudentInCourse = async (values: { studentName: string, teach
 
   return { success: `Student ${studentName} has been successfully enrolled in course ${courseName}` };
 };
+
+
+export async function getStudentsByTeacherAndCourse(teacherName: string, courseId: string) {
+  try {
+    // Find the teacher by user name
+    const teacherUser = await db.user.findFirst({
+      where: {
+        username: teacherName,
+      },
+      include: {
+        teacher: true,
+      },
+    });
+
+    if (!teacherUser || !teacherUser.teacher) {
+      return { error: `Teacher with name ${teacherName} not found` };
+    }
+
+    const teacher = teacherUser.teacher;
+
+    // Find the course by name
+    const course = await db.course.findFirst({
+      where: {
+        id:courseId,
+      },
+      include: {
+        teachers: true,
+        students: true,
+      },
+    });
+
+    if (!course) {
+      return { error: `Course  not found` };
+    }
+
+    // Check if the course is assigned to the teacher
+    const isCourseAssignedToTeacher = course.teachers.some(t => t.id === teacher.id);
+
+    if (!isCourseAssignedToTeacher) {
+      return { error: `This course is not assigned to teacher ${teacherName}` };
+    }
+
+    const students = await db.student.findMany({
+      where: {
+        enrollments: {
+          some: {
+            course: {
+             id:courseId,
+            },
+            teacher: {
+              user: {
+                username: teacherName,
+              },
+            },
+          },
+        },
+      },
+      include: {
+        user: true,
+      },
+    });
+
+    const simplifiedStudents = students.map(student => ({
+      username: student.user.username,
+      email: student.user.email,
+      branch: student.branch, // Assuming 'branch' is a field in user
+    }));
+
+    
+    return { students: simplifiedStudents };
+  } catch (error) {
+    return { error: "Something went wrong" };
+  }
+}
+
+
+
+
+export async function generateQRCode(userId: string, courseId: string) {
+  try {
+    const teacher = await db.teacher.findUnique({
+      where: { id: userId },
+      include: { user: true }
+    });
+
+    if (!teacher) {
+      return { error: "Teacher not found for the given user ID" };
+    }
+
+    const course = await db.course.findUnique({
+      where: { id: courseId }
+    });
+
+    if (!course) {
+      return { error: "Course not found" };
+    }
+
+    // Set expiration time (e.g., 5 minutes from now)
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+
+    // Check if a QR code already exists for this teacher and course
+    let qrCodeRecord = await db.qRCode.findFirst({
+      where: {
+        teacherId: teacher.id,
+        courseId: courseId,
+      },
+    });
+
+    if (qrCodeRecord) {
+      // Update the existing QR code with a new expiration time
+      qrCodeRecord = await db.qRCode.update({
+        where: { id: qrCodeRecord.id },
+        data: {
+          expiresAt,
+          code: Math.random().toString(36).substring(2, 15), // Generate a new code
+        },
+      });
+    } else {
+      // Create a new QR code if one doesn't exist
+      qrCodeRecord = await db.qRCode.create({
+        data: {
+          code: Math.random().toString(36).substring(2, 15),
+          teacherId: teacher.id,
+          courseId,
+          expiresAt,
+        },
+      });
+    }
+    return { 
+      success: true, 
+      code: qrCodeRecord.code, 
+      expiresAt: qrCodeRecord.expiresAt.toISOString(),
+      qrCodeId: qrCodeRecord.id  // Include the QR code ID in the response
+    };
+  } catch (error) {
+    console.error("Error generating QR code:", error);
+    return { error: "Error while generating QR code" };
+  }
+}
+
+
+export async function markAttendance(data: string) {
+  try {
+    const decodedData = JSON.parse(atob(data));
+    const { teacherId, courseId, code, expiresAt, qrCodeId } = decodedData;
+
+    // Check if the QR code has expired
+    if (new Date() > new Date(expiresAt)) {
+      return { error: 'QR code has expired' };
+    }
+
+    // Verify the QR code in the database
+    const qrCode = await db.qRCode.findUnique({
+      where: { id: qrCodeId },
+      include: { teacher: true, course: true },
+    });
+
+    if (!qrCode) {
+      return { error: 'QR code is missing' };
+    }
+    if (qrCode.courseId !== courseId) {
+      return { error: 'Course ID does not match' };
+    }
+    
+    if (qrCode.teacherId !== teacherId) {
+      return { error: 'Teacher ID does not match' };
+    }
+    
+    
+    
+    if (qrCode.code !== code) {
+      return { error: 'QR code does not match' };
+    }
+    
+
+    // Get the current user (student)
+    const currentUser = await currentProfile();
+    if (!currentUser || currentUser.role !== Role.STUDENT) {
+      return { error: 'User not authenticated or not a student' };
+    }
+
+    const student = await db.student.findUnique({
+      where: { userId: currentUser.id },
+      include: { courses: true },
+    });
+
+    if (!student) {
+      return { error: 'Student not found' };
+    }
+
+    // Check if the student is enrolled in the course
+    const isEnrolled = student.courses.some(course => course.id === courseId);
+    if (!isEnrolled) {
+      return { error: 'Student is not enrolled in this course' };
+    }
+
+    // Mark attendance
+    const attendanceRecord = await db.attendanceRecord.create({
+      data: {
+        studentId: student.id,
+        courseId,
+        teacherId,
+        qrCodeId,
+        session:"2024",
+        status: AttendanceStatus.PRESENT,
+      },
+    });
+
+    return { success:  'Attendance marked successfully' };
+  } catch (error) {
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002') {
+      return { error: "You have already marked your attendance" };
+    }
+
+    return { error: 'An error occurred while marking attendance' };
+  }
+}

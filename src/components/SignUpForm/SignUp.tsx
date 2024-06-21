@@ -35,6 +35,7 @@ const SignUpForm = () => {
   const [error, setError] = useState<string | undefined>("");
   const [success, setSuccess] = useState<string | undefined>("");
   const [isPending, startTransition] = useTransition();
+  const pathName=usePathname();
   const form = useForm<z.infer<typeof FormSchema>>({
     resolver: zodResolver(FormSchema),
     defaultValues: {
@@ -44,12 +45,13 @@ const SignUpForm = () => {
       role: Role.STUDENT,
       branch: "",
       confirmPassword: "",
+      registrationNumber:"",
     },
   });
 
   const onSubmit = (values: z.infer<typeof FormSchema>) => {
     startTransition(() => {
-      const pathName=usePathname();
+      
       signup(values,pathName).then((data) => {
         setError(data?.error);
         setSuccess(data?.success);
@@ -79,6 +81,7 @@ const SignUpForm = () => {
               </FormItem>
             )}
           />
+          
           <FormField
             control={form.control}
             name="email"
@@ -131,7 +134,26 @@ const SignUpForm = () => {
               </FormItem>
             )}
           />
-        
+        {selectedRole===Role.STUDENT &&(
+           <FormField
+           control={form.control}
+           name="registrationNumber"
+           render={({ field }) => (
+             <FormItem >
+               <FormLabel>Registration Number</FormLabel>
+               <FormControl>
+                 <Input
+                    className="bg-white focus:ring-0 text-black ring-offset-0 focus:ring-offset-0 "
+                   disabled={isPending}
+                   placeholder="Enter your Registration number"
+                   {...field}
+                 />
+               </FormControl>
+               <FormMessage />
+             </FormItem>
+           )}
+         />
+        )}
             <FormField
               control={form.control}
               name="branch"

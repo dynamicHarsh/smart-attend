@@ -19,6 +19,7 @@ export const LoginSchema = z.object({
       .min(8, 'Password must have than 8 characters'),
     confirmPassword: z.string().min(1, 'Password confirmation is required'),
     branch: z.string().optional(),
+    registrationNumber:z.string().optional(),
   })
   .refine((data) => data.password === data.confirmPassword, {
     path: ['confirmPassword'],

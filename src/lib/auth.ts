@@ -9,7 +9,7 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
       if(token.sub && session.user){
         session.user.id=token.sub;
       }
-      console.log(session);
+      
       return session;
     },
     async jwt({token}){
