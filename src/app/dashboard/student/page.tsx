@@ -1,10 +1,10 @@
+export const dynamic = 'force-dynamic'
 import CourseCard from "@/components/dashboard/course_card";
-import { Button } from "@/components/ui/button";
 import { getEnrolledCourses } from "@/lib/actions";
-import { signOut } from "@/lib/auth";
 import { currentProfile } from "@/lib/currentProfile";
 import { Role } from "@prisma/client";
 import { redirect } from "next/navigation";
+
 
 const StudentPage = async () => {
   const student = await currentProfile();

@@ -1,23 +1,34 @@
-import { Button } from "@/components/ui/button";
-import { signOut } from "@/lib/auth"
+export const dynamic = 'force-dynamic'
+
 import { currentProfile } from "@/lib/currentProfile";
 import { Role } from "@prisma/client";
 import { redirect } from "next/navigation";
 
 
-const Dashboard =async () => {
-  const user= await currentProfile();
+const Dashboard = async () => {
+  
+    const user = await currentProfile();
 
+    if (!user) {
+      redirect("auth/login");
+    }
+   
 
-  if(user?.role===Role.TEACHER){
-    return redirect("/dashboard/teacher")
-  }
-  if(user?.role===Role.STUDENT){
-    return redirect("/dashboard/student");
-  }  
-  if(user?.role===Role.ADMIN){
-    return redirect("/admin_dashboard");
-  }
- 
-}
+    if(user){
+     return  <h1>{`hello there, welcome ${user.username}`}</h1>
+    }
+    // switch (user.role) {
+    //   case Role.TEACHER:
+    //     redirect("/dashboard/teacher");
+    //   case Role.STUDENT:
+    //     redirect("/dashboard/student");
+    //   case Role.ADMIN:
+    //     redirect("/admin_dashboard");
+    //   default:
+    //     redirect("/error");
+    // }
+  
+  
+};
+
 export default Dashboard;

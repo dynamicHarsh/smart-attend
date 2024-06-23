@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import GenerateQRCodeComponent from "@/components/dashboard/generate_qr_code";
 import StudentCard from "@/components/dashboard/student_card";
 import {  getStudentsByTeacherAndCourse } from "@/lib/actions";
@@ -19,7 +21,6 @@ type Props={
 
 const TeacherPage = async ({params:{course_Id}}:Props) => {
   const teacher = await currentProfile();
-   const url = `http://localhost:3000/dashboard/student/courses/${course_Id}/mark_attendance`;
    
  
 
@@ -42,11 +43,11 @@ const TeacherPage = async ({params:{course_Id}}:Props) => {
   return (
     <div className="ml-2">
       <GenerateQRCodeComponent courseId={course_Id} teacherId={teacher?.teacher?.id}/>
-      <h1 className="mb-8 text-sm">Assigned Students</h1>
+      <h1 className="mb-8  text-2xl font-semibold">Students Enrolled</h1>
       {isStudentsResponse(studentsResponse) && (
         <div className=" w-full grid grid-cols-1 gap-2 sm:grid-cols-1 md:grid-cols-2  xl:grid-cols-3">
           {studentsResponse.students.map((student) => (
-             <div className="col-span-1">
+             <div key={student.email} className="col-span-1">
             <StudentCard key={student.username} student={student} />
             </div>
           ))}

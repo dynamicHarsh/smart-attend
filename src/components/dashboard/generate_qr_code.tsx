@@ -57,8 +57,8 @@ export default function GenerateQRCodeComponent({ teacherId, courseId }: Props) 
   };
 
   return (
-    <div className="container mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-4">Generate QR Code</h1>
+    <div className="mb-8">
+      <h1 className="text-2xl font-semibold mb-4">Generate QR Code</h1>
       <button
         onClick={handleGenerateQRCode}
         className="px-4 py-2 bg-blue-500 text-white rounded-md"
@@ -68,7 +68,6 @@ export default function GenerateQRCodeComponent({ teacherId, courseId }: Props) 
       {qrData && !isExpired && (
         <div className="mt-4">
           <h2 className="text-xl font-semibold mb-2">Generated QR Code:</h2>
-          {qrData}
           <QRCode value={qrData} size={256} />
           <p>Expires at: {expiresAt?.toLocaleString()}</p>
         </div>

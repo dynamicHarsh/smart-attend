@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic'
 import { Separator } from "@/components/ui/separator"
 import Analytics from "@/components/admin_dashboard/Analytics"
 import { currentProfile } from "@/lib/currentProfile"

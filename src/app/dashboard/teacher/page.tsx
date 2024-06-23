@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import CourseCard from "@/components/dashboard/course_card";
 import { Button } from "@/components/ui/button";
 import { getCoursesForTeacher } from "@/lib/actions";
