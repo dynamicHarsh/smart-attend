@@ -635,7 +635,7 @@ export async function markAttendance(data: string) {
         courseId: courseId,
         date: {
           gte: today,
-          lt: new Date(today.getTime() +   25 * 1000), // Next day
+          lt: new Date(today.getTime() +   60 * 1000), // Next day
         },
       },
     });
