@@ -328,48 +328,50 @@ export const getCoursesForTeacher = async (teacherName: string) => {
 };
 
 export const enrollStudentInCourse = async (values: {
-  studentName: string;
-  teacherName: string;
-  courseName: string;
+  studentId: string;
+  teacherId: string;
+  courseId: string;
+  department:string;
 }) => {
-  const { studentName, teacherName, courseName } = values;
+  const { studentId, teacherId, courseId } = values;
+
+  console.log(values);
 
   // Find the student by user name
-  const studentUser = await db.user.findFirst({
+  const student = await db.student.findUnique({
     where: {
-      username: studentName,
+      id:studentId
     },
-    include: {
-      student: true,
-    },
+    include:{
+      user:true
+    }
+    
   });
 
-  if (!studentUser || !studentUser.student) {
-    return { error: `Student with name ${studentName} not found` };
+  if (!student) {
+    return { error: `Student not found` };
   }
 
-  const student = studentUser.student;
 
   // Find the teacher by user name
-  const teacherUser = await db.user.findFirst({
+  const teacher = await db.teacher.findUnique({
     where: {
-      username: teacherName,
+      id:teacherId
     },
-    include: {
-      teacher: true,
-    },
+    include:{
+      user:true
+    }
+   
   });
 
-  if (!teacherUser || !teacherUser.teacher) {
-    return { error: `Teacher with name ${teacherName} not found` };
+  if (!teacher) {
+    return { error: `Teacher not found` };
   }
 
-  const teacher = teacherUser.teacher;
-
   // Find the course by name
-  const course = await db.course.findFirst({
+  const course = await db.course.findUnique({
     where: {
-      name: courseName,
+      id:courseId
     },
     include: {
       teachers: true,
@@ -378,7 +380,7 @@ export const enrollStudentInCourse = async (values: {
   });
 
   if (!course) {
-    return { error: `Course with name ${courseName} not found` };
+    return { error: `Course not found` };
   }
 
   // Check if the course is assigned to the teacher
@@ -388,7 +390,7 @@ export const enrollStudentInCourse = async (values: {
 
   if (!isCourseAssignedToTeacher) {
     return {
-      error: `Course ${courseName} is not assigned to teacher ${teacherName}`,
+      error: `Course ${course.name} is not assigned to teacher ${teacher.user.username}`,
     };
   }
 
@@ -403,7 +405,7 @@ export const enrollStudentInCourse = async (values: {
 
   if (isStudentEnrolled) {
     return {
-      error: `Student ${studentName} is already enrolled in course ${courseName}`,
+      error: `Student ${student.user.username} is already enrolled in course ${course.name}`,
     };
   }
 
@@ -429,7 +431,7 @@ export const enrollStudentInCourse = async (values: {
   });
 
   return {
-    success: `Student ${studentName} has been successfully enrolled in course ${courseName}`,
+    success: `Student ${student.user.username} has been successfully enrolled in course ${course.name}`,
   };
 };
 
@@ -594,11 +596,9 @@ export async function markAttendance(data: string) {
     if (qrCode.courseId !== courseId) {
       return { error: "Course ID does not match" };
     }
-
     if (qrCode.teacherId !== teacherId) {
       return { error: "Teacher ID does not match" };
     }
-
     if (qrCode.code !== code) {
       return { error: "QR code does not match" };
     }
@@ -624,6 +624,26 @@ export async function markAttendance(data: string) {
       return { error: "Student is not enrolled in this course" };
     }
 
+    // Get today's date (without time)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Check if attendance has already been marked for today
+    const existingAttendance = await db.attendanceRecord.findFirst({
+      where: {
+        studentId: student.id,
+        courseId: courseId,
+        date: {
+          gte: today,
+          lt: new Date(today.getTime() +   25 * 1000), // Next day
+        },
+      },
+    });
+
+    if (existingAttendance) {
+      return { error: "Attendance already marked for today" };
+    }
+
     // Mark attendance
     const attendanceRecord = await db.attendanceRecord.create({
       data: {
@@ -633,25 +653,16 @@ export async function markAttendance(data: string) {
         qrCodeId,
         session: "2024",
         status: AttendanceStatus.PRESENT,
+        date: new Date(), // Set to current date and time
       },
     });
 
     return { success: "Attendance marked successfully" };
   } catch (error) {
-    if (
-      typeof error === "object" &&
-      error !== null &&
-      "code" in error &&
-      error.code === "P2002"
-    ) {
-      return { error: "You have already marked your attendance" };
-    }
-
+    console.error("Error marking attendance:", error);
     return { error: "An error occurred while marking attendance" };
   }
 }
-
-
 
 export async function getAllTeachersAndCourses() {
   try {
@@ -698,5 +709,105 @@ export async function getAllTeachersAndCourses() {
   } catch (error) {
     console.error("Error fetching teachers and courses:", error);
     return {error:"Error fetching teachers and courses"};
+  }
+}
+
+// app/actions/getTeachersByDepartment.ts
+
+
+
+export async function getTeachersByDepartment(department: string) {
+  try {
+    const teachers = await db.teacher.findMany({
+      where: {
+        department: department
+      },
+      include: {
+        user: {
+          select: {
+            username: true
+          }
+        }
+      }
+    })
+    if(!teachers || teachers.length===0){
+      return {error:"no teacher found"}
+    }
+
+    const simplifiedTeachers = teachers.map(teacher => ({
+      department: teacher.department,
+      teacherId: teacher.id,
+      username: teacher.user.username
+    }))
+
+    return { data: simplifiedTeachers }
+  } catch (error) {
+    console.error('Error fetching teachers:', error)
+    return {error:"Error while fetching teachers"}
+  }
+}
+
+export async function getCoursesByDepartmentAndTeacher(department: string, teacherId: string) {
+  try {
+    const courses = await db.course.findMany({
+      where: {
+        department: department,
+        teachers: {
+          some: {
+            id: teacherId
+          }
+        }
+      },
+      select: {
+        id: true,
+        name: true,
+        code: true
+      }
+    })
+
+    if (!courses || courses.length === 0) {
+      return { error: "No courses found for this teacher in the specified department" }
+    }
+
+    return { data: courses }
+  } catch (error) {
+    console.error('Error fetching courses:', error)
+    return { error: "Error while fetching courses" }
+  }
+}
+
+
+export async function getAllStudents() {
+  try {
+    const students = await db.student.findMany({
+      select: {
+        id: true,
+        branch: true,
+        registrationNumber: true,
+        user: {
+          select: {
+            username: true,
+            email: true
+          }
+        }
+      }
+    })
+
+    if (!students || students.length === 0) {
+      return { error: "No students found" }
+    }
+
+    const simplifiedStudents = students.map(student => ({
+      id: student.id,
+      username: student.user.username,
+      email: student.user.email,
+      branch: student.branch,
+      registrationNumber: student.registrationNumber
+    }))
+
+    return { data: simplifiedStudents }
+  } catch (error) {
+    console.error('Error fetching students:', error)
+    return { error: "Error while fetching students" }
   }
 }

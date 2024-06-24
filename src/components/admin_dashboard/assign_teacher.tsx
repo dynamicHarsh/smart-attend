@@ -152,7 +152,7 @@ const AssignCourseToTeacherForm = () => {
                       e.preventDefault();
                       setOpenTeacherDialog(true);
                     }}
-                  >
+                  >   
                     {field.value
                       ? teachersAndCourses.teachers?.find((teacher) => teacher.id === field.value)?.name
                       : "Select teacher..."}
@@ -165,11 +165,12 @@ const AssignCourseToTeacherForm = () => {
                     <CommandEmpty>No teacher found.</CommandEmpty>
                     <CommandGroup>
                       <CommandList>
+                      
                         {isTeachersAndCoursesResponse(teachersAndCourses) && teachersAndCourses.teachers?.map((teacher) => (
                           selectedDepartment === teacher.department && (
                             <CommandItem
                               key={teacher.id}
-                              value={teacher.id}
+                              value={teacher.name}
                               onSelect={() => {
                                 form.setValue("teacherId", teacher.id);
                                 setOpenTeacherDialog(false);
@@ -227,7 +228,7 @@ const AssignCourseToTeacherForm = () => {
                           selectedDepartment === course.department && (
                             <CommandItem
                               key={course.id}
-                              value={course.id}
+                              value={course.name}
                               onSelect={() => {
                                 form.setValue("courseId", course.id);
                                 setOpenCourseDialog(false);
@@ -239,7 +240,7 @@ const AssignCourseToTeacherForm = () => {
                                   field.value === course.id ? "opacity-100" : "opacity-0"
                                 )}
                               />
-                              {course.name}
+                              {`${course.name}(${course.code})`}
                             </CommandItem>
                           )
                         ))}
