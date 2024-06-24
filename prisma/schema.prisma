@@ -81,7 +81,7 @@ model AttendanceRecord {
   teacher   Teacher           @relation(fields: [teacherId], references: [id])
   teacherId String
   qrCode    QRCode            @relation(fields: [qrCodeId], references: [id])
-  qrCodeId  String            @unique
+  qrCodeId  String            
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt @default(now())
 }
