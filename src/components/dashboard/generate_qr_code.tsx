@@ -65,6 +65,7 @@ export default function GenerateQRCodeComponent({ teacherId, courseId }: Props) 
       >
         Generate New QR Code
       </button>
+      {qrData}
       {qrData && !isExpired && (
         <div className="mt-4">
           <h2 className="text-xl font-semibold mb-2">Generated QR Code:</h2>

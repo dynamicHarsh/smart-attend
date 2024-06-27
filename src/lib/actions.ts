@@ -201,13 +201,13 @@ export async function addCourse(
 export const assignCourseToTeacher = async (values: {
   teacherId: string;
   courseId: string;
-  department:string;
+  department: string;
 }) => {
   // Find the teacher by name
   const { teacherId, courseId } = values;
   const teacher = await db.teacher.findUnique({
     where: {
-      id:teacherId,
+      id: teacherId,
     },
     include: {
       user: true,
@@ -221,7 +221,7 @@ export const assignCourseToTeacher = async (values: {
   // Find the course by name
   const course = await db.course.findUnique({
     where: {
-      id:courseId,
+      id: courseId,
     },
   });
 
@@ -331,7 +331,7 @@ export const enrollStudentInCourse = async (values: {
   studentId: string;
   teacherId: string;
   courseId: string;
-  department:string;
+  department: string;
 }) => {
   const { studentId, teacherId, courseId } = values;
 
@@ -340,28 +340,25 @@ export const enrollStudentInCourse = async (values: {
   // Find the student by user name
   const student = await db.student.findUnique({
     where: {
-      id:studentId
+      id: studentId,
     },
-    include:{
-      user:true
-    }
-    
+    include: {
+      user: true,
+    },
   });
 
   if (!student) {
     return { error: `Student not found` };
   }
 
-
   // Find the teacher by user name
   const teacher = await db.teacher.findUnique({
     where: {
-      id:teacherId
+      id: teacherId,
     },
-    include:{
-      user:true
-    }
-   
+    include: {
+      user: true,
+    },
   });
 
   if (!teacher) {
@@ -371,7 +368,7 @@ export const enrollStudentInCourse = async (values: {
   // Find the course by name
   const course = await db.course.findUnique({
     where: {
-      id:courseId
+      id: courseId,
     },
     include: {
       teachers: true,
@@ -625,25 +622,27 @@ export async function markAttendance(data: string) {
     }
 
     // Get today's date (without time)
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
 
     // Check if attendance has already been marked for today
+    const sixteenHoursAgo = new Date(Date.now() -  2*60*60 * 1000);
+
     const existingAttendance = await db.attendanceRecord.findFirst({
       where: {
         studentId: student.id,
         courseId: courseId,
+        teacherId,
         date: {
-          gte: today,
-          lt: new Date(today.getTime() +   60 * 1000), // Next day
+          gte: sixteenHoursAgo,
         },
       },
+      orderBy: {
+        date: "desc",
+      },
     });
-
+    console.log(existingAttendance?.date.toLocaleString())
     if (existingAttendance) {
-      return { error: "Attendance already marked for today" };
+      return { error: "You have already marked your attendence for today" };
     }
-
     // Mark attendance
     const attendanceRecord = await db.attendanceRecord.create({
       data: {
@@ -680,15 +679,14 @@ export async function getAllTeachersAndCourses() {
       },
     });
 
-    if(!fetchedTeachers){
-      return {error:"no teachers found"}
+    if (!fetchedTeachers) {
+      return { error: "no teachers found" };
     }
-    const teachers= fetchedTeachers.map((teacher)=>({
-      department:teacher.department,
-      id:teacher.id,
-      name:teacher.user.username
-    }
-    ))
+    const teachers = fetchedTeachers.map((teacher) => ({
+      department: teacher.department,
+      id: teacher.id,
+      name: teacher.user.username,
+    }));
 
     const courses = await db.course.findMany({
       select: {
@@ -698,84 +696,86 @@ export async function getAllTeachersAndCourses() {
         department: true,
       },
     });
-    if(!courses){
-      return {error:"no teachers and courses found"}
+    if (!courses) {
+      return { error: "no teachers and courses found" };
     }
 
     return {
-        teachers,
-        courses,
+      teachers,
+      courses,
     };
   } catch (error) {
     console.error("Error fetching teachers and courses:", error);
-    return {error:"Error fetching teachers and courses"};
+    return { error: "Error fetching teachers and courses" };
   }
 }
 
 // app/actions/getTeachersByDepartment.ts
 
-
-
 export async function getTeachersByDepartment(department: string) {
   try {
     const teachers = await db.teacher.findMany({
       where: {
-        department: department
+        department: department,
       },
       include: {
         user: {
           select: {
-            username: true
-          }
-        }
-      }
-    })
-    if(!teachers || teachers.length===0){
-      return {error:"no teacher found"}
+            username: true,
+          },
+        },
+      },
+    });
+    if (!teachers || teachers.length === 0) {
+      return { error: "no teacher found" };
     }
 
-    const simplifiedTeachers = teachers.map(teacher => ({
+    const simplifiedTeachers = teachers.map((teacher) => ({
       department: teacher.department,
       teacherId: teacher.id,
-      username: teacher.user.username
-    }))
+      username: teacher.user.username,
+    }));
 
-    return { data: simplifiedTeachers }
+    return { data: simplifiedTeachers };
   } catch (error) {
-    console.error('Error fetching teachers:', error)
-    return {error:"Error while fetching teachers"}
+    console.error("Error fetching teachers:", error);
+    return { error: "Error while fetching teachers" };
   }
 }
 
-export async function getCoursesByDepartmentAndTeacher(department: string, teacherId: string) {
+export async function getCoursesByDepartmentAndTeacher(
+  department: string,
+  teacherId: string
+) {
   try {
     const courses = await db.course.findMany({
       where: {
         department: department,
         teachers: {
           some: {
-            id: teacherId
-          }
-        }
+            id: teacherId,
+          },
+        },
       },
       select: {
         id: true,
         name: true,
-        code: true
-      }
-    })
+        code: true,
+      },
+    });
 
     if (!courses || courses.length === 0) {
-      return { error: "No courses found for this teacher in the specified department" }
+      return {
+        error: "No courses found for this teacher in the specified department",
+      };
     }
 
-    return { data: courses }
+    return { data: courses };
   } catch (error) {
-    console.error('Error fetching courses:', error)
-    return { error: "Error while fetching courses" }
+    console.error("Error fetching courses:", error);
+    return { error: "Error while fetching courses" };
   }
 }
-
 
 export async function getAllStudents() {
   try {
@@ -787,27 +787,27 @@ export async function getAllStudents() {
         user: {
           select: {
             username: true,
-            email: true
-          }
-        }
-      }
-    })
+            email: true,
+          },
+        },
+      },
+    });
 
     if (!students || students.length === 0) {
-      return { error: "No students found" }
+      return { error: "No students found" };
     }
 
-    const simplifiedStudents = students.map(student => ({
+    const simplifiedStudents = students.map((student) => ({
       id: student.id,
       username: student.user.username,
       email: student.user.email,
       branch: student.branch,
-      registrationNumber: student.registrationNumber
-    }))
+      registrationNumber: student.registrationNumber,
+    }));
 
-    return { data: simplifiedStudents }
+    return { data: simplifiedStudents };
   } catch (error) {
-    console.error('Error fetching students:', error)
-    return { error: "Error while fetching students" }
+    console.error("Error fetching students:", error);
+    return { error: "Error while fetching students" };
   }
 }
