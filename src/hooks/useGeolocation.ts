@@ -18,7 +18,7 @@ interface Coordinate {
   timestamp: number;
 }
 
-const useDiagnosticGeolocation = (sampleSize = 50, timeout = 30000, accuracyThreshold = 20) => {
+const useDiagnosticGeolocation = (sampleSize = 500, timeout = 60000, accuracyThreshold = 3) => {
   const [state, setState] = useState<LocationState>({
     coords: null,
     error: null,
@@ -45,29 +45,65 @@ const useDiagnosticGeolocation = (sampleSize = 50, timeout = 30000, accuracyThre
     }
   }, []);
 
+  const calculateWeightedCentroid = useCallback((coordinates: Coordinate[]) => {
+    if (coordinates.length === 0) return null;
+
+    let totalWeight = 0;
+    let weightedLat = 0;
+    let weightedLon = 0;
+
+    coordinates.forEach(coord => {
+      const weight = 1 / (coord.accuracy * coord.accuracy); // Use inverse square of accuracy as weight
+      totalWeight += weight;
+      weightedLat += coord.latitude * weight;
+      weightedLon += coord.longitude * weight;
+    });
+
+    const finalLat = weightedLat / totalWeight;
+    const finalLon = weightedLon / totalWeight;
+
+    // Calculate the average accuracy
+    const avgAccuracy = coordinates.reduce((sum, coord) => sum + coord.accuracy, 0) / coordinates.length;
+
+    return {
+      latitude: finalLat,
+      longitude: finalLon,
+      accuracy: avgAccuracy,
+      timestamp: Date.now()
+    };
+  }, []);
+
   const processSamples = useCallback(() => {
-    const sortedCoordinates = coordinatesRef.current.sort((a, b) => a.accuracy - b.accuracy);
-    const bestCoordinate = sortedCoordinates[0];
+    const centroid = calculateWeightedCentroid(coordinatesRef.current);
+
+    if (!centroid) {
+      setState(prev => ({
+        ...prev,
+        error: 'Unable to calculate position',
+        status: 'done',
+      }));
+      return;
+    }
 
     setState(prev => ({
       ...prev,
       coords: {
-        latitude: bestCoordinate.latitude,
-        longitude: bestCoordinate.longitude,
-        accuracy: bestCoordinate.accuracy,
+        latitude: centroid.latitude,
+        longitude: centroid.longitude,
+        accuracy: centroid.accuracy,
         altitude: null,
         altitudeAccuracy: null,
         heading: null,
         speed: null,
       },
       error: null,
-      accuracy: bestCoordinate.accuracy,
-      timestamp: bestCoordinate.timestamp,
-      isHighAccuracy: bestCoordinate.accuracy <= accuracyThreshold,
-      provider: 'GPS (Best of multiple samples)',
+      accuracy: centroid.accuracy,
+      timestamp: centroid.timestamp,
+      isHighAccuracy: centroid.accuracy <= accuracyThreshold,
+      provider: 'GPS (Weighted Centroid)',
       status: 'done',
     }));
-  }, [accuracyThreshold]);
+  }, [calculateWeightedCentroid, accuracyThreshold]);
 
   const getLocation = useCallback(() => {
     if (!navigator.geolocation) {
@@ -95,16 +131,27 @@ const useDiagnosticGeolocation = (sampleSize = 50, timeout = 30000, accuracyThre
       };
       coordinatesRef.current.push(newCoordinate);
 
-      // Update state with the latest coordinate
-      setState(prev => ({
-        ...prev,
-        coords: position.coords,
-        accuracy: position.coords.accuracy,
-        timestamp: position.timestamp,
-        isHighAccuracy: position.coords.accuracy <= accuracyThreshold,
-      }));
+      // Update state with the latest centroid
+      const currentCentroid = calculateWeightedCentroid(coordinatesRef.current);
+      if (currentCentroid) {
+        setState(prev => ({
+          ...prev,
+          coords: {
+            latitude: currentCentroid.latitude,
+            longitude: currentCentroid.longitude,
+            accuracy: currentCentroid.accuracy,
+            altitude: null,
+            altitudeAccuracy: null,
+            heading: null,
+            speed: null,
+          },
+          accuracy: currentCentroid.accuracy,
+          timestamp: currentCentroid.timestamp,
+          isHighAccuracy: currentCentroid.accuracy <= accuracyThreshold,
+        }));
+      }
 
-      if (position.coords.accuracy <= accuracyThreshold || coordinatesRef.current.length >= sampleSize) {
+      if (coordinatesRef.current.length >= sampleSize) {
         stopWatching();
         processSamples();
       }
@@ -143,7 +190,7 @@ const useDiagnosticGeolocation = (sampleSize = 50, timeout = 30000, accuracyThre
       }
     }, timeout);
 
-  }, [sampleSize, timeout, accuracyThreshold, stopWatching, processSamples]);
+  }, [sampleSize, timeout, accuracyThreshold, stopWatching, processSamples, calculateWeightedCentroid]);
 
   useEffect(() => {
     return () => {
