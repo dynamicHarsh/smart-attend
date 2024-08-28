@@ -16,7 +16,7 @@ export default function GenerateQRCodeComponent({ teacherId, courseId }: Props) 
   const [isExpired, setIsExpired] = useState(false);
   const [domain, setDomain] = useState('');
   const [isGeneratingQR, setIsGeneratingQR] = useState(false);
-  const { coords, error, accuracy, timestamp, isHighAccuracy, provider, attempts, status, getLocation } = useDiagnosticGeolocation(50, 30000, 20);
+  const { coords, error, accuracy, timestamp, isHighAccuracy, provider, attempts, status, getLocation } = useDiagnosticGeolocation(5000, 360000, 2);
 
   useEffect(() => {
     setDomain(window.location.origin);
