@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { auth } from "./auth";
 import { db } from "./db";
 
@@ -6,7 +7,9 @@ export const currentProfile = async () => {
         const session = await auth();
         
         if (!session?.user?.id) {
-            return null;
+            
+        return redirect("/auth/login");
+           
         }
 
         const profile = await db.user.findUnique({
@@ -45,8 +48,5 @@ export const currentProfile = async () => {
     } catch (error) {
         console.error("Error in currentProfile:", error);
         return null;
-    } finally {
-        // If you're not using a connection pool, you might need to explicitly close the connection
-        // await db.$disconnect();
-    }
+    } 
 };

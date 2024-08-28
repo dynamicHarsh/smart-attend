@@ -1,4 +1,5 @@
 'use client'
+
 import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode.react';
 import { generateQRCode } from '@/lib/actions';
@@ -15,7 +16,7 @@ export default function GenerateQRCodeComponent({ teacherId, courseId }: Props) 
   const [isExpired, setIsExpired] = useState(false);
   const [domain, setDomain] = useState('');
   const [isGeneratingQR, setIsGeneratingQR] = useState(false);
-  const { coords, error, accuracy, timestamp, isHighAccuracy, provider, attempts, getLocation } = useDiagnosticGeolocation();
+  const { coords, error, accuracy, timestamp, isHighAccuracy, provider, attempts, status, getLocation } = useDiagnosticGeolocation(50, 30000, 20);
 
   useEffect(() => {
     setDomain(window.location.origin);
@@ -75,9 +76,9 @@ export default function GenerateQRCodeComponent({ teacherId, courseId }: Props) 
       <button
         onClick={getLocation}
         className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-        disabled={isGeneratingQR}
+        disabled={isGeneratingQR || status === 'watching'}
       >
-        Get Accurate Location (Attempt: {attempts + 1})
+        {status === 'watching' ? 'Getting Location...' : `Get Accurate Location (Attempt: ${attempts})`}
       </button>
       {error && <p className="text-red-500">{error}</p>}
       {coords && (
@@ -87,18 +88,21 @@ export default function GenerateQRCodeComponent({ teacherId, courseId }: Props) 
           <p>Timestamp: {new Date(timestamp || 0).toLocaleString()}</p>
           <p>High Accuracy: {isHighAccuracy ? 'Yes' : 'No'}</p>
           <p>Provider: {provider}</p>
-          <p>Attempts: {attempts}</p>
+          <p>Status: {status}</p>
         </div>
       )}
       <button
         onClick={handleGenerateQRCode}
         className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"
-        disabled={!coords || isGeneratingQR || (accuracy ? accuracy > 100 : false)}
+        disabled={!coords || isGeneratingQR || status === 'watching'}
       >
         {isGeneratingQR ? 'Generating...' : 'Generate New QR Code'}
       </button>
-      {accuracy && accuracy > 100 && (
-        <p className="text-yellow-500">Location accuracy is low. Consider retrying for better accuracy.</p>
+      {status === 'timedOut' && (
+        <p className="text-yellow-500">
+          Location accuracy is low. The QR code will be generated with the best available location, 
+          but it may not be as accurate as desired. Consider trying again in a different location or environment.
+        </p>
       )}
       {qrData && !isExpired && (
         <div className="border p-4 rounded">
