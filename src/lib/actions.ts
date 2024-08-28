@@ -509,7 +509,8 @@ export async function getStudentsByTeacherAndCourse(
   }
 }
 
-export async function generateQRCode(userId: string, courseId: string) {
+
+export async function generateQRCode(userId: string, courseId: string, latitude: number, longitude: number) {
   try {
     const teacher = await db.teacher.findUnique({
       where: { id: userId },
@@ -539,13 +540,16 @@ export async function generateQRCode(userId: string, courseId: string) {
       },
     });
 
+    const location = `${latitude},${longitude}`;
+
     if (qrCodeRecord) {
-      // Update the existing QR code with a new expiration time
+      // Update the existing QR code with a new expiration time and location
       qrCodeRecord = await db.qRCode.update({
         where: { id: qrCodeRecord.id },
         data: {
           expiresAt,
           code: Math.random().toString(36).substring(2, 15), // Generate a new code
+          location,
         },
       });
     } else {
@@ -556,14 +560,17 @@ export async function generateQRCode(userId: string, courseId: string) {
           teacherId: teacher.id,
           courseId,
           expiresAt,
+          location,
         },
       });
     }
+
     return {
       success: true,
       code: qrCodeRecord.code,
       expiresAt: qrCodeRecord.expiresAt.toISOString(),
-      qrCodeId: qrCodeRecord.id, // Include the QR code ID in the response
+      qrCodeId: qrCodeRecord.id,
+      location: qrCodeRecord.location,
     };
   } catch (error) {
     console.error("Error generating QR code:", error);

@@ -22,8 +22,6 @@ type Props={
 const TeacherPage = async ({params:{course_Id}}:Props) => {
   const teacher = await currentProfile();
    
- 
-
   if (!teacher?.teacher || teacher?.role === Role.STUDENT) {
     return redirect("/dashboard");
   }
