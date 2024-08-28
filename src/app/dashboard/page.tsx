@@ -12,21 +12,19 @@ const Dashboard = async () => {
     if (!user) {
       redirect("auth/login");
     }
-   
 
-    if(user){
-     return  <h1>{`hello there, welcome ${user.username}`}</h1>
+    switch (user.role) {
+      case Role.TEACHER:
+        redirect("/dashboard/teacher");
+      case Role.STUDENT:
+        redirect("/dashboard/student");
+      case Role.ADMIN:
+        redirect("/admin_dashboard");
+      default:
+        redirect("/error");
     }
-    // switch (user.role) {
-    //   case Role.TEACHER:
-    //     redirect("/dashboard/teacher");
-    //   case Role.STUDENT:
-    //     redirect("/dashboard/student");
-    //   case Role.ADMIN:
-    //     redirect("/admin_dashboard");
-    //   default:
-    //     redirect("/error");
-    // }
+
+   
   
   
 };
