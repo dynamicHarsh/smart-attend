@@ -1,11 +1,11 @@
 // app/dashboard/student/courses/[courseId]/mark_attendance/page.tsx
 
-import { getAccuratePosition } from '@/lib/geolocation';
 import ErrorComponent from "@/components/dashboard/mark_attendence/attendence_error";
 import LoadingComponent from "@/components/dashboard/mark_attendence/attendence_loading";
 import SuccessComponent from "@/components/dashboard/mark_attendence/attendence_success";
 import { markAttendance } from "@/lib/actions";
 import { currentProfile } from "@/lib/currentProfile";
+import { getAccuratePosition } from "@/lib/geolocation";
 import { redirect } from "next/navigation";
 
 export const dynamic = 'force-dynamic';
