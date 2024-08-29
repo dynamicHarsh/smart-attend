@@ -18,7 +18,7 @@ interface Coordinate {
   timestamp: number;
 }
 
-const useDiagnosticGeolocation = (sampleSize = 5000, timeout = 60000, accuracyThreshold = 2) => {
+const useDiagnosticGeolocation = (sampleSize = 50, timeout = 60000, accuracyThreshold = 2) => {
   const [state, setState] = useState<LocationState>({
     coords: null,
     error: null,
