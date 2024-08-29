@@ -1,37 +1,28 @@
-'use client';
-import { motion } from 'framer-motion';
-import { useRouter } from 'next/navigation';
+import { AttendanceStatus } from "@prisma/client";
 
-export default function SuccessComponent({ message }: { message: string }) {
-  const router = useRouter();
+interface SuccessComponentProps {
+  message: string;
+  status: AttendanceStatus;
+  isPotentialProxy: boolean;
+}
 
+const SuccessComponent: React.FC<SuccessComponentProps> = ({ message, status, isPotentialProxy }) => {
   return (
-    <div className="flex items-center justify-center w-full h-full min-h-[50vh]">
-      <motion.div
-        className="bg-white p-8 rounded-xl shadow-lg text-center max-w-md w-full"
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.5 }}
-      >
-        <motion.div
-          className="text-6xl mb-4 inline-block"
-          initial={{ scale: 0 }}
-          animate={{ scale: 1, rotate: 360 }}
-          transition={{ type: "spring", stiffness: 260, damping: 20 }}
-        >
-          ✅
-        </motion.div>
-        <h1 className="text-2xl font-bold mb-2 text-gray-800">Attendance Marked!</h1>
-        <p className="text-gray-600 text-sm mb-4">{message}</p>
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={() => router.push('/dashboard/student')}
-          className="px-4 py-2 bg-gradient-to-r from-green-400 to-blue-500 text-white rounded-full font-semibold text-sm hover:from-green-500 hover:to-blue-600 transition-colors duration-300 shadow-md"
-        >
-          Back to Dashboard
-        </motion.button>
-      </motion.div>
+    <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative" role="alert">
+      <strong className="font-bold">Success!</strong>
+      <span className="block sm:inline"> {message}</span>
+      {status === AttendanceStatus.ABSENT && (
+        <p className="mt-2 text-yellow-600">
+          Your attendance was marked as absent due to location mismatch.
+        </p>
+      )}
+      {isPotentialProxy && (
+        <p className="mt-2 text-red-600">
+          Warning: Your location suggests potential proxy attendance. This will be reviewed.
+        </p>
+      )}
     </div>
   );
-}
+};
+
+export default SuccessComponent;

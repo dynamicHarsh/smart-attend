@@ -578,10 +578,23 @@ export async function generateQRCode(userId: string, courseId: string, latitude:
   }
 }
 
+function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371; // Radius of the Earth in km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  const distance = R * c; // Distance in km
+  return distance;
+}
+
 export async function markAttendance(data: string) {
   try {
     const decodedData = JSON.parse(atob(data));
-    const { teacherId, courseId, code, expiresAt, qrCodeId } = decodedData;
+    const { teacherId, courseId, code, expiresAt, qrCodeId, latitude, longitude } = decodedData;
 
     // Check if the QR code has expired
     if (new Date() > new Date(expiresAt)) {
@@ -628,10 +641,8 @@ export async function markAttendance(data: string) {
       return { error: "Student is not enrolled in this course" };
     }
 
-    // Get today's date (without time)
-
     // Check if attendance has already been marked for today
-    const sixteenHoursAgo = new Date(Date.now() -  2*60*60 * 1000);
+    const sixteenHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
 
     const existingAttendance = await db.attendanceRecord.findFirst({
       where: {
@@ -646,10 +657,29 @@ export async function markAttendance(data: string) {
         date: "desc",
       },
     });
-    console.log(existingAttendance?.date.toLocaleString())
+
     if (existingAttendance) {
-      return { error: "You have already marked your attendence for today" };
+      return { error: "You have already marked your attendance for today" };
     }
+
+    // Calculate distance between QR code location and student's location
+    const qrCodeLocation = qrCode.location?.split(',').map(Number);
+    if (!qrCodeLocation || qrCodeLocation.length !== 2) {
+      return { error: "Invalid QR code location" };
+    }
+
+    const distance = calculateDistance(
+      qrCodeLocation[0], qrCodeLocation[1],
+      latitude, longitude
+    );
+
+    // Define the maximum allowed distance (e.g., 100 meters)
+    const MAX_DISTANCE = 0.1; // 100 meters in kilometers
+
+    // Determine attendance status and potential proxy
+    const status = distance <= MAX_DISTANCE ? AttendanceStatus.PRESENT : AttendanceStatus.ABSENT;
+    const isPotentialProxy = distance > MAX_DISTANCE;
+
     // Mark attendance
     const attendanceRecord = await db.attendanceRecord.create({
       data: {
@@ -658,12 +688,20 @@ export async function markAttendance(data: string) {
         teacherId,
         qrCodeId,
         session: "2024",
-        status: AttendanceStatus.PRESENT,
-        date: new Date(), // Set to current date and time
+        status,
+        date: new Date(),
+        scanLocation: `${latitude},${longitude}`,
+        isPotentialProxy,
       },
     });
 
-    return { success: "Attendance marked successfully" };
+    return { 
+      success: status === AttendanceStatus.PRESENT 
+        ? "Attendance marked successfully" 
+        : "Attendance marked as absent due to location mismatch",
+      status,
+      isPotentialProxy
+    };
   } catch (error) {
     console.error("Error marking attendance:", error);
     return { error: "An error occurred while marking attendance" };
