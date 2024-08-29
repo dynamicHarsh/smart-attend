@@ -77,7 +77,7 @@ export default function GenerateQRCodeComponent({ teacherId, courseId }: Props) 
   };
 
   return (
-    <Card className="w-full max-w-md mx-auto">
+    <Card className="w-full  mx-auto">
       <CardHeader>
         <CardTitle className="text-2xl font-bold text-center">QR Code Generator</CardTitle>
       </CardHeader>

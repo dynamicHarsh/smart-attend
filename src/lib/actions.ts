@@ -651,7 +651,6 @@ export async function markAttendance(data: string, studentLatitude: number, stud
       return { error: "You have already marked your attendance for today" };
     }
 
-    // Calculate distance between QR code location and student's location
     const distance = calculateDistance(
       latitude,
       longitude,
@@ -659,8 +658,7 @@ export async function markAttendance(data: string, studentLatitude: number, stud
       studentLongitude
     );
 
-    // Define a threshold distance (e.g., 100 meters)
-    const DISTANCE_THRESHOLD = 10000; // in meters
+    const DISTANCE_THRESHOLD = 100; // in meters
 
     // Determine attendance status and potential proxy
     let status : AttendanceStatus;
