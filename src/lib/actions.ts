@@ -631,7 +631,7 @@ export async function markAttendance(data: string, studentLatitude: number, stud
     }
 
     // Check if attendance has already been marked for today
-    const sixteenHoursAgo = new Date(Date.now() - 16 * 60 * 60 * 1000);
+    const sixteenHoursAgo = new Date(Date.now() - 60 * 1000);
 
     const existingAttendance = await db.attendanceRecord.findFirst({
       where: {
