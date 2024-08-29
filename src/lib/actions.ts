@@ -578,6 +578,7 @@ export async function generateQRCode(userId: string, courseId: string, latitude:
   }
 }
 
+
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371; // Radius of the Earth in km
   const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -591,10 +592,10 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
   return distance;
 }
 
-export async function markAttendance(data: string) {
+export async function markAttendance(data: string, latitude: number, longitude: number, accuracy: number) {
   try {
     const decodedData = JSON.parse(atob(data));
-    const { teacherId, courseId, code, expiresAt, qrCodeId, latitude, longitude } = decodedData;
+    const { teacherId, courseId, code, expiresAt, qrCodeId } = decodedData;
 
     // Check if the QR code has expired
     if (new Date() > new Date(expiresAt)) {
@@ -642,7 +643,7 @@ export async function markAttendance(data: string) {
     }
 
     // Check if attendance has already been marked for today
-    const sixteenHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    const sixteenHoursAgo = new Date(Date.now() - 16 * 60 * 60 * 1000);
 
     const existingAttendance = await db.attendanceRecord.findFirst({
       where: {
@@ -707,7 +708,6 @@ export async function markAttendance(data: string) {
     return { error: "An error occurred while marking attendance" };
   }
 }
-
 export async function getAllTeachersAndCourses() {
   try {
     const fetchedTeachers = await db.teacher.findMany({

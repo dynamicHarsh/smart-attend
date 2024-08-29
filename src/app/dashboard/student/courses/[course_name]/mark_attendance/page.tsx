@@ -1,15 +1,22 @@
-export const dynamic = 'force-dynamic'
+// app/dashboard/student/courses/[courseId]/mark_attendance/page.tsx
 
+import { getAccuratePosition } from '@/lib/geolocation';
 import ErrorComponent from "@/components/dashboard/mark_attendence/attendence_error";
 import LoadingComponent from "@/components/dashboard/mark_attendence/attendence_loading";
 import SuccessComponent from "@/components/dashboard/mark_attendence/attendence_success";
 import { markAttendance } from "@/lib/actions";
 import { currentProfile } from "@/lib/currentProfile";
 import { redirect } from "next/navigation";
-import { Suspense } from 'react';
 
-async function AttendanceMarker({ data }: { data: string }) {
-  const result = await markAttendance(data);
+export const dynamic = 'force-dynamic';
+
+async function AttendanceMarker({ data, latitude, longitude, accuracy }: { 
+  data: string; 
+  latitude: number; 
+  longitude: number; 
+  accuracy: number;
+}) {
+  const result = await markAttendance(data, latitude, longitude, accuracy);
 
   if (result.success) {
     return (
@@ -23,7 +30,6 @@ async function AttendanceMarker({ data }: { data: string }) {
     return <ErrorComponent message={result.error} />;
   }
 
-  // This shouldn't happen, but just in case
   return <ErrorComponent message="An unexpected error occurred" />;
 }
 
@@ -42,9 +48,10 @@ export default async function MarkAttendance({
     return <ErrorComponent message="Invalid QR Code" />;
   }
 
-  return (
-    <Suspense fallback={<LoadingComponent />}>
-      <AttendanceMarker data={searchParams.data} />
-    </Suspense>
-  );
+  try {
+    const { latitude, longitude, accuracy } = await getAccuratePosition();
+    return <AttendanceMarker data={searchParams.data} latitude={latitude} longitude={longitude} accuracy={accuracy} />;
+  } catch (error) {
+    return <ErrorComponent message="Failed to get accurate location. Please ensure location services are enabled and try again." />;
+  }
 }
