@@ -105,7 +105,9 @@ export default function GenerateQRCodeComponent({ teacherId, courseId }: Props) 
         </p>
       )}
       {qrData && !isExpired && (
+        
         <div className="border p-4 rounded">
+          {qrData}
           <h3 className="font-bold mb-2">Generated QR Code:</h3>
           <QRCode value={qrData} size={256} />
           <p className="mt-2">Expires at: {expiresAt?.toLocaleString()}</p>

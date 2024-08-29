@@ -1,71 +1,52 @@
 // lib/geolocation.ts
 
-interface Coordinate {
-    latitude: number;
-    longitude: number;
-    accuracy: number;
+export interface GeolocationResult {
+    coords: {
+      latitude: number;
+      longitude: number;
+      accuracy: number;
+    } | null;
+    error: string | null;
   }
   
-  export async function getCurrentPosition(options?: PositionOptions): Promise<GeolocationPosition> {
-    return new Promise((resolve, reject) => {
-      if (!navigator.geolocation) {
-        reject(new Error('Geolocation is not supported by your browser'));
-      } else {
-        navigator.geolocation.getCurrentPosition(resolve, reject, options);
-      }
+  export async function getGeolocation(): Promise<GeolocationResult> {
+    if (typeof window === 'undefined' || !navigator.geolocation) {
+      return { coords: null, error: 'Geolocation is not supported' };
+    }
+  
+    return new Promise((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          resolve({
+            coords: {
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude,
+              accuracy: position.coords.accuracy,
+            },
+            error: null,
+          });
+        },
+        (error) => {
+          resolve({ coords: null, error: error.message });
+        },
+        { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 }
+      );
     });
   }
   
-  export async function getAccuratePosition(
-    sampleSize: number = 5,
-    timeout: number = 10000,
-    accuracyThreshold: number = 10
-  ): Promise<Coordinate> {
-    const startTime = Date.now();
-    const coordinates: Coordinate[] = [];
+  export function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const R = 6371; // Radius of the earth in km
+    const dLat = deg2rad(lat2 - lat1);
+    const dLon = deg2rad(lon2 - lon1);
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
+      Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    const d = R * c; // Distance in km
+    return d * 1000; // Convert to meters
+  }
   
-    while (coordinates.length < sampleSize && Date.now() - startTime < timeout) {
-      try {
-        const position = await getCurrentPosition({ enableHighAccuracy: true, timeout: 5000, maximumAge: 0 });
-        coordinates.push({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          accuracy: position.coords.accuracy
-        });
-  
-        if (position.coords.accuracy <= accuracyThreshold) {
-          return {
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-            accuracy: position.coords.accuracy
-          };
-        }
-      } catch (error) {
-        console.error('Error getting location:', error);
-      }
-    }
-  
-    if (coordinates.length === 0) {
-      throw new Error('Unable to get accurate location');
-    }
-  
-    // Calculate weighted average
-    let totalWeight = 0;
-    let weightedLat = 0;
-    let weightedLon = 0;
-    let totalAccuracy = 0;
-  
-    coordinates.forEach(coord => {
-      const weight = 1 / (coord.accuracy * coord.accuracy);
-      totalWeight += weight;
-      weightedLat += coord.latitude * weight;
-      weightedLon += coord.longitude * weight;
-      totalAccuracy += coord.accuracy;
-    });
-  
-    return {
-      latitude: weightedLat / totalWeight,
-      longitude: weightedLon / totalWeight,
-      accuracy: totalAccuracy / coordinates.length
-    };
+  function deg2rad(deg: number): number {
+    return deg * (Math.PI/180);
   }
