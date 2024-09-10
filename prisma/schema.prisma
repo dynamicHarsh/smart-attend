@@ -42,6 +42,7 @@ model Teacher {
   attendanceRecords AttendanceRecord[]
   enrollments       Enrollment[]
   qrCodes           QRCode[]           @relation("TeacherQRCodes")
+  bluetoothSessions BluetoothSession[]
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt @default(now())
 }
@@ -65,27 +66,31 @@ model Course {
   attendanceRecords AttendanceRecord[]
   enrollments       Enrollment[]
   qrCodes           QRCode[]           @relation("CourseQRCodes")
+  bluetoothSessions BluetoothSession[]
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt @default(now())
 }
 
 model AttendanceRecord {
-  id        String            @id @default(uuid())
-  student   Student           @relation(fields: [studentId], references: [id])
-  studentId String
-  course    Course            @relation(fields: [courseId], references: [id])
-  courseId  String
-  date      DateTime          @default(now())
-  status    AttendanceStatus  @default(PRESENT)
-  session   String
-  teacher   Teacher           @relation(fields: [teacherId], references: [id])
-  teacherId String
-  qrCode    QRCode            @relation(fields: [qrCodeId], references: [id])
-  qrCodeId  String
-  scanLocation   String?      @default("") 
-  isPotentialProxy Boolean    @default(false)
-  createdAt DateTime          @default(now())
-  updatedAt DateTime          @updatedAt @default(now())
+  id                String            @id @default(uuid())
+  student           Student           @relation(fields: [studentId], references: [id])
+  studentId         String
+  course            Course            @relation(fields: [courseId], references: [id])
+  courseId          String
+  date              DateTime          @default(now())
+  status            AttendanceStatus  @default(PRESENT)
+  session           String
+  teacher           Teacher           @relation(fields: [teacherId], references: [id])
+  teacherId         String
+  qrCode            QRCode?           @relation(fields: [qrCodeId], references: [id])
+  qrCodeId          String?
+  bluetoothSession  BluetoothSession? @relation(fields: [bluetoothSessionId], references: [id])
+  bluetoothSessionId String?
+  attendanceMethod  AttendanceMethod  @default(QR_CODE)
+  scanLocation      String?           @default("")
+  isPotentialProxy  Boolean           @default(false)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt @default(now())
 }
 
 model QRCode {
@@ -97,7 +102,21 @@ model QRCode {
   teacher           Teacher            @relation("TeacherQRCodes", fields: [teacherId], references: [id])
   course            Course             @relation("CourseQRCodes", fields: [courseId], references: [id])
   expiresAt         DateTime
-  location          String?            @default("") 
+  location          String?            @default("")
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt @default(now())
+}
+
+model BluetoothSession {
+  id                String             @id @default(uuid())
+  sessionCode       String             @unique
+  teacherId         String
+  courseId          String
+  teacher           Teacher            @relation(fields: [teacherId], references: [id])
+  course            Course             @relation(fields: [courseId], references: [id])
+  attendanceRecords AttendanceRecord[]
+  startTime         DateTime           @default(now())
+  endTime           DateTime?
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt @default(now())
 }
@@ -123,4 +142,10 @@ enum Role {
 enum AttendanceStatus {
   PRESENT
   ABSENT
+}
+
+enum AttendanceMethod {
+  QR_CODE
+  BLUETOOTH
+  MANUAL
 }

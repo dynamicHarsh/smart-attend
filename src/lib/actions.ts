@@ -511,10 +511,10 @@ export async function getStudentsByTeacherAndCourse(
 }
 
 
-export async function generateQRCode(userId: string, courseId: string, latitude: number, longitude: number) {
+export async function generateQRCode(teacherId: string, courseId: string, latitude: number, longitude: number) {
   try {
     const teacher = await db.teacher.findUnique({
-      where: { id: userId },
+      where: { id: teacherId },
       include: { user: true },
     });
 
@@ -579,7 +579,47 @@ export async function generateQRCode(userId: string, courseId: string, latitude:
   }
 }
 
+export async function startBluetoothSession(teacherId: string, courseId: string, deviceId: string) {
+  try {
+    const teacher = await db.teacher.findUnique({
+      where: { id: teacherId },
+    });
 
+    if (!teacher) {
+      return { error: "Teacher not found for the given user ID" };
+    }
+
+    const course = await db.course.findUnique({
+      where: { id: courseId },
+    });
+
+    if (!course) {
+      return { error: "Course not found" };
+    }
+
+    // Generate a unique session code
+    const sessionCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+
+    // Create a new Bluetooth session
+    const bluetoothSession = await db.bluetoothSession.create({
+      data: {
+        sessionCode,
+        teacherId,
+        courseId,
+        startTime: new Date(),
+      },
+    });
+
+    return {
+      success: true,
+      sessionCode: bluetoothSession.sessionCode,
+      sessionId: bluetoothSession.id,
+    };
+  } catch (error) {
+    console.error("Error starting Bluetooth session:", error);
+    return { error: "Error while starting Bluetooth session" };
+  }
+}
 export async function markAttendance(data: string, studentLatitude: number, studentLongitude: number) {
   try {
     const decodedData = JSON.parse(atob(data));
