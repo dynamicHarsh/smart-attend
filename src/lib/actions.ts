@@ -511,15 +511,15 @@ export async function getStudentsByTeacherAndCourse(
 }
 
 
-export async function generateQRCode(userId: string, courseId: string, latitude: number, longitude: number) {
+export async function generateAttendanceLink(teacherId: string, courseId: string, latitude: number, longitude: number) {
   try {
     const teacher = await db.teacher.findUnique({
-      where: { id: userId },
+      where: { id: teacherId },
       include: { user: true },
     });
 
     if (!teacher) {
-      return { error: "Teacher not found for the given user ID" };
+      return { error: "Teacher not found for the given ID" };
     }
 
     const course = await db.course.findUnique({
@@ -533,82 +533,28 @@ export async function generateQRCode(userId: string, courseId: string, latitude:
     // Set expiration time (e.g., 5 minutes from now)
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
 
-    // Check if a QR code already exists for this teacher and course
-    let qrCodeRecord = await db.qRCode.findFirst({
-      where: {
+    const attendanceLink = await db.attendanceLink.create({
+      data: {
         teacherId: teacher.id,
-        courseId: courseId,
+        courseId,
+        expiresAt,
+        location: `${latitude},${longitude}`,
       },
     });
 
-    const location = `${latitude},${longitude}`;
-
-    if (qrCodeRecord) {
-      // Update the existing QR code with a new expiration time and location
-      qrCodeRecord = await db.qRCode.update({
-        where: { id: qrCodeRecord.id },
-        data: {
-          expiresAt,
-          code: Math.random().toString(36).substring(2, 15), // Generate a new code
-          location,
-        },
-      });
-    } else {
-      // Create a new QR code if one doesn't exist
-      qrCodeRecord = await db.qRCode.create({
-        data: {
-          code: Math.random().toString(36).substring(2, 15),
-          teacherId: teacher.id,
-          courseId,
-          expiresAt,
-          location,
-        },
-      });
-    }
-
     return {
       success: true,
-      code: qrCodeRecord.code,
-      expiresAt: qrCodeRecord.expiresAt.toISOString(),
-      qrCodeId: qrCodeRecord.id,
-      location: qrCodeRecord.location,
+      linkId: attendanceLink.id,
+      expiresAt: attendanceLink.expiresAt.toISOString(),
     };
   } catch (error) {
-    console.error("Error generating QR code:", error);
-    return { error: "Error while generating QR code" };
+    console.error("Error generating attendance link:", error);
+    return { error: "Error while generating attendance link" };
   }
 }
 
-
-export async function markAttendance(data: string, studentLatitude: number, studentLongitude: number) {
+export async function markAttendance(linkId: string, studentLatitude: number, studentLongitude: number) {
   try {
-    const decodedData = JSON.parse(atob(data));
-    const { teacherId, courseId, code, expiresAt, qrCodeId, latitude, longitude } = decodedData;
-
-    // Check if the QR code has expired
-    if (new Date() > new Date(expiresAt)) {
-      return { error: "QR code has expired" };
-    }
-
-    // Verify the QR code in the database
-    const qrCode = await db.qRCode.findUnique({
-      where: { id: qrCodeId },
-      include: { teacher: true, course: true },
-    });
-
-    if (!qrCode) {
-      return { error: "QR code is missing" };
-    }
-    if (qrCode.courseId !== courseId) {
-      return { error: "Course ID does not match" };
-    }
-    if (qrCode.teacherId !== teacherId) {
-      return { error: "Teacher ID does not match" };
-    }
-    if (qrCode.code !== code) {
-      return { error: "QR code does not match" };
-    }
-
     // Get the current user (student)
     const currentUser = await currentProfile();
     if (!currentUser || currentUser.role !== Role.STUDENT) {
@@ -624,20 +570,35 @@ export async function markAttendance(data: string, studentLatitude: number, stud
       return { error: "Student not found" };
     }
 
+    // Find the attendance link
+    const attendanceLink = await db.attendanceLink.findUnique({
+      where: { id: linkId },
+      include: { course: true },
+    });
+
+    if (!attendanceLink) {
+      return { error: "Invalid attendance link" };
+    }
+
+    // Check if the link has expired
+    if (new Date() > attendanceLink.expiresAt) {
+      return { error: "Attendance link has expired" };
+    }
+
     // Check if the student is enrolled in the course
-    const isEnrolled = student.courses.some((course) => course.id === courseId);
+    const isEnrolled = student.courses.some((course) => course.id === attendanceLink.courseId);
     if (!isEnrolled) {
       return { error: "Student is not enrolled in this course" };
     }
 
     // Check if attendance has already been marked for today
-    const sixteenHoursAgo = new Date(Date.now() - 60 * 1000);
+    const sixteenHoursAgo = new Date(Date.now() - 16 * 60 * 60 * 1000);
 
     const existingAttendance = await db.attendanceRecord.findFirst({
       where: {
         studentId: student.id,
-        courseId: courseId,
-        teacherId,
+        courseId: attendanceLink.courseId,
+        teacherId: attendanceLink.teacherId,
         date: {
           gte: sixteenHoursAgo,
         },
@@ -651,9 +612,11 @@ export async function markAttendance(data: string, studentLatitude: number, stud
       return { error: "You have already marked your attendance for today" };
     }
 
+    const [teacherLatitude, teacherLongitude] = attendanceLink.location.split(',').map(Number);
+
     const distance = calculateDistance(
-      latitude,
-      longitude,
+      teacherLatitude,
+      teacherLongitude,
       studentLatitude,
       studentLongitude
     );
@@ -661,40 +624,73 @@ export async function markAttendance(data: string, studentLatitude: number, stud
     const DISTANCE_THRESHOLD = 100; // in meters
 
     // Determine attendance status and potential proxy
-    let status : AttendanceStatus;
-    status=AttendanceStatus.PRESENT;
+    let status: AttendanceStatus = AttendanceStatus.PRESENT;
     let isPotentialProxy = false;
 
-    if (distance > DISTANCE_THRESHOLD) {
-      status = AttendanceStatus.ABSENT;
-      isPotentialProxy = true;
-    }
-
-    // Mark attendance
-    const attendanceRecord = await db.attendanceRecord.create({
-      data: {
-        studentId: student.id,
-        courseId,
-        teacherId,
-        qrCodeId,
-        session: "2024",
+      if (distance > DISTANCE_THRESHOLD) {
+        status = AttendanceStatus.ABSENT;
+        isPotentialProxy = true;
+      }
+  
+      // Mark attendance
+      const attendanceRecord = await db.attendanceRecord.create({
+        data: {
+          studentId: student.id,
+          courseId: attendanceLink.courseId,
+          teacherId: attendanceLink.teacherId,
+          attendanceLinkId: attendanceLink.id,
+          session: "2024", // You might want to make this dynamic
+          status,
+          date: new Date(),
+          scanLocation: `${studentLatitude.toFixed(8)},${studentLongitude.toFixed(8)}`,
+          isPotentialProxy,
+        },
+      });
+  
+      return { 
+        success: "Attendance marked successfully",
         status,
-        date: new Date(),
-        scanLocation: `${latitude.toFixed(8)},${longitude.toFixed(8)}`,
-        isPotentialProxy,
-      },
-    });
-
-    return { 
-      success: "Attendance marked successfully",
-      status,
-      isPotentialProxy
-    };
-  } catch (error) {
-    console.error("Error marking attendance:", error);
-    return { error: "An error occurred while marking attendance" };
+        isPotentialProxy
+      };
+    } catch (error) {
+      console.error("Error marking attendance:", error);
+      return { error: "An error occurred while marking attendance" };
+    }
   }
-}
+  
+  export async function getAttendanceButton(studentId: string, courseId: string) {
+    try {
+      // Check if the student is enrolled in the course
+      const enrollment = await db.courseEnrollment.findFirst({
+        where: {
+          studentId: studentId,
+          courseId: courseId,
+        },
+      });
+  
+      if (!enrollment) {
+        return { show: false };
+      }
+  
+      // Check if there's an active attendance link for the course
+      const activeLink = await db.attendanceLink.findFirst({
+        where: {
+          courseId: courseId,
+          expiresAt: {
+            gt: new Date(),
+          },
+        },
+      });
+  
+      return { 
+        show: !!activeLink,
+        linkId: activeLink?.id
+      };
+    } catch (error) {
+      console.error("Error checking attendance button visibility:", error);
+      return { error: "An error occurred while checking attendance button visibility" };
+    }
+  }
 export async function getAllTeachersAndCourses() {
   try {
     const fetchedTeachers = await db.teacher.findMany({

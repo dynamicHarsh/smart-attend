@@ -8,119 +8,117 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  password  String
-  role      Role     @default(STUDENT)
-  username  String
-  student   Student?
-  teacher   Teacher?
-  admin     Admin?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt @default(now())
+  id             String    @id @default(uuid())
+  name           String?
+  email          String?   @unique
+  emailVerified  DateTime?
+  image          String?
+  hashedPassword String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  role    Role     @default(STUDENT)
+  student Student?
+  teacher Teacher?
 }
 
 model Student {
-  id                 String             @id @default(uuid())
-  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId             String             @unique
-  branch             String
-  registrationNumber String             @unique
-  courses            Course[]           @relation("StudentCourses")
+  id           String   @id @default(uuid())
+  userId       String   @unique
+  enrollmentNo String   @unique
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user               User               @relation(fields: [userId], references: [id])
+  courses            Course[]
   attendanceRecords  AttendanceRecord[]
-  enrollments        Enrollment[]
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt @default(now())
+  courseEnrollments  CourseEnrollment[]
 }
 
 model Teacher {
-  id                String             @id @default(uuid())
-  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId            String             @unique
-  department        String
-  courses           Course[]           @relation("TeacherCourses")
-  attendanceRecords AttendanceRecord[]
-  enrollments       Enrollment[]
-  qrCodes           QRCode[]           @relation("TeacherQRCodes")
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt @default(now())
-}
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  employeeId  String   @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-model Admin {
-  id        String   @id @default(uuid())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId    String   @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt @default(now())
+  user              User              @relation(fields: [userId], references: [id])
+  courses           Course[]
+  attendanceRecords AttendanceRecord[]
+  attendanceLinks   AttendanceLink[]
 }
 
 model Course {
-  id                String             @id @default(uuid())
-  name              String
-  code              String             @unique
-  session           String
-  department        String
-  teachers          Teacher[]          @relation("TeacherCourses")
-  students          Student[]          @relation("StudentCourses")
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  teacher           Teacher            @relation(fields: [teacherId], references: [id])
+  teacherId         String
+  students          Student[]
   attendanceRecords AttendanceRecord[]
-  enrollments       Enrollment[]
-  qrCodes           QRCode[]           @relation("CourseQRCodes")
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt @default(now())
+  attendanceLinks   AttendanceLink[]
+  courseEnrollments CourseEnrollment[]
 }
 
 model AttendanceRecord {
-  id        String            @id @default(uuid())
-  student   Student           @relation(fields: [studentId], references: [id])
-  studentId String
-  course    Course            @relation(fields: [courseId], references: [id])
-  courseId  String
-  date      DateTime          @default(now())
-  status    AttendanceStatus  @default(PRESENT)
-  session   String
-  teacher   Teacher           @relation(fields: [teacherId], references: [id])
-  teacherId String
-  qrCode    QRCode            @relation(fields: [qrCodeId], references: [id])
-  qrCodeId  String
-  scanLocation   String?      @default("") 
-  isPotentialProxy Boolean    @default(false)
-  createdAt DateTime          @default(now())
-  updatedAt DateTime          @updatedAt @default(now())
-}
+  id                String           @id @default(uuid())
+  date              DateTime
+  status            AttendanceStatus
+  scanLocation      String?
+  isPotentialProxy  Boolean          @default(false)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
 
-model QRCode {
-  id                String             @id @default(uuid())
-  code              String             @unique
-  attendanceRecords AttendanceRecord[]
-  teacherId         String
+  student           Student          @relation(fields: [studentId], references: [id])
+  studentId         String
+  course            Course           @relation(fields: [courseId], references: [id])
   courseId          String
-  teacher           Teacher            @relation("TeacherQRCodes", fields: [teacherId], references: [id])
-  course            Course             @relation("CourseQRCodes", fields: [courseId], references: [id])
-  expiresAt         DateTime
-  location          String?            @default("") 
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt @default(now())
+  teacher           Teacher          @relation(fields: [teacherId], references: [id])
+  teacherId         String
+  attendanceLink    AttendanceLink   @relation(fields: [attendanceLinkId], references: [id])
+  attendanceLinkId  String
+  session           String
 }
 
-model Enrollment {
-  id             String   @id @default(uuid())
-  student        Student  @relation(fields: [studentId], references: [id])
-  studentId      String
-  course         Course   @relation(fields: [courseId], references: [id])
-  courseId       String
-  teacher        Teacher  @relation(fields: [teacherId], references: [id])
-  teacherId      String
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt @default(now())
+model AttendanceLink {
+  id        String   @id @default(uuid())
+  expiresAt DateTime
+  location  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  teacher   Teacher @relation(fields: [teacherId], references: [id])
+  teacherId String
+  course    Course  @relation(fields: [courseId], references: [id])
+  courseId  String
+
+  attendanceRecords AttendanceRecord[]
+}
+
+model CourseEnrollment {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  student   Student @relation(fields: [studentId], references: [id])
+  studentId String
+  course    Course  @relation(fields: [courseId], references: [id])
+  courseId  String
+
+  @@unique([studentId, courseId])
 }
 
 enum Role {
-  STUDENT
-  TEACHER
   ADMIN
+  TEACHER
+  STUDENT
 }
 
 enum AttendanceStatus {
   PRESENT
   ABSENT
+  LATE
 }

@@ -1,26 +1,24 @@
-'use client'
-
 import React, { useState, useEffect } from 'react';
-import QRCode from 'qrcode.react';
-import { generateQRCode } from '@/lib/actions';
+import { generateAttendanceLink } from '@/lib/actions';
 import useDiagnosticGeolocation from '@/hooks/useGeolocation';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, MapPin, RefreshCw } from "lucide-react";
+import { Loader2, MapPin, Link } from "lucide-react";
+import { Input } from "@/components/ui/input";
 
 interface Props {
   teacherId: string;
   courseId: string;
 }
 
-export default function GenerateQRCodeComponent({ teacherId, courseId }: Props) {
-  const [qrData, setQrData] = useState('');
+export default function GenerateLinkComponent({ teacherId, courseId }: Props) {
+  const [linkData, setLinkData] = useState('');
   const [expiresAt, setExpiresAt] = useState<Date | null>(null);
   const [isExpired, setIsExpired] = useState(false);
   const [domain, setDomain] = useState('');
-  const [isGeneratingQR, setIsGeneratingQR] = useState(false);
+  const [isGeneratingLink, setIsGeneratingLink] = useState(false);
   const { coords, error, accuracy, timestamp, isHighAccuracy, provider, attempts, status, getLocation } = useDiagnosticGeolocation(150, 30000, 2);
 
   useEffect(() => {
@@ -42,51 +40,42 @@ export default function GenerateQRCodeComponent({ teacherId, courseId }: Props) 
     return () => clearInterval(timer);
   }, [expiresAt]);
 
-  const handleGenerateQRCode = async () => {
+  const handleGenerateLink = async () => {
     if (!coords) {
       console.error('Location not available');
       return;
     }
 
-    setIsGeneratingQR(true);
+    setIsGeneratingLink(true);
 
     try {
-      const result = await generateQRCode(teacherId, courseId, coords.latitude, coords.longitude);
+      const result = await generateAttendanceLink(teacherId, courseId, coords.latitude, coords.longitude);
       if (result.success) {
-        const encodedData = btoa(JSON.stringify({
-          teacherId,
-          courseId,
-          code: result.code,
-          expiresAt: result.expiresAt,
-          qrCodeId: result.qrCodeId,
-          latitude: coords.latitude,
-          longitude: coords.longitude
-        }));
-        const url = `${domain}/dashboard/student/courses/${courseId}/mark_attendance?data=${encodedData}`;
-        setQrData(url);
+        const url = `${domain}/dashboard/student/courses/${courseId}/mark_attendance?linkId=${result.linkId}`;
+        setLinkData(url);
         setExpiresAt(new Date(result.expiresAt));
         setIsExpired(false);
       } else {
-        console.error('Error generating QR code:', result.error);
+        console.error('Error generating attendance link:', result.error);
       }
     } catch (error) {
-      console.error('Error generating QR code:', error);
+      console.error('Error generating attendance link:', error);
     } finally {
-      setIsGeneratingQR(false);
+      setIsGeneratingLink(false);
     }
   };
 
   return (
-    <Card className="w-full  mx-auto">
+    <Card className="w-full mx-auto">
       <CardHeader>
-        <CardTitle className="text-2xl font-bold text-center">QR Code Generator</CardTitle>
+        <CardTitle className="text-2xl font-bold text-center">Generate Attendance Link</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <Button
           onClick={getLocation}
           className="w-full"
           variant="outline"
-          disabled={isGeneratingQR || status === 'watching'}
+          disabled={isGeneratingLink || status === 'watching'}
         >
           {status === 'watching' ? (
             <>
@@ -124,19 +113,19 @@ export default function GenerateQRCodeComponent({ teacherId, courseId }: Props) 
         )}
 
         <Button
-          onClick={handleGenerateQRCode}
+          onClick={handleGenerateLink}
           className="w-full"
-          disabled={!coords || isGeneratingQR || status === 'watching'}
+          disabled={!coords || isGeneratingLink || status === 'watching'}
         >
-          {isGeneratingQR ? (
+          {isGeneratingLink ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               Generating...
             </>
           ) : (
             <>
-              <RefreshCw className="mr-2 h-4 w-4" />
-              Generate New QR Code
+              <Link className="mr-2 h-4 w-4" />
+              Generate Attendance Link
             </>
           )}
         </Button>
@@ -144,30 +133,35 @@ export default function GenerateQRCodeComponent({ teacherId, courseId }: Props) 
         {status === 'timedOut' && (
           <Alert>
             <AlertDescription>
-              Location accuracy is low. The QR code will be generated with the best available location, 
+              Location accuracy is low. The link will be generated with the best available location, 
               but it may not be as accurate as desired. Consider trying again in a different location or environment.
             </AlertDescription>
           </Alert>
         )}
 
-        {qrData && !isExpired && (
+        {linkData && !isExpired && (
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.5 }}
             className="border p-4 rounded-lg text-center"
           >
-            <h3 className="font-bold mb-2">Generated QR Code:</h3>
-            <div className="flex justify-center">
-              <QRCode value={qrData} size={256} />
-            </div>
+            <h3 className="font-bold mb-2">Generated Attendance Link:</h3>
+            <Input value={linkData} readOnly className="mb-2" />
+            <Button
+              onClick={() => navigator.clipboard.writeText(linkData)}
+              variant="outline"
+              className="w-full"
+            >
+              Copy Link
+            </Button>
             <p className="mt-2">Expires at: {expiresAt?.toLocaleString()}</p>
           </motion.div>
         )}
 
         {isExpired && (
           <Alert variant="destructive">
-            <AlertDescription>QR Code has expired. Please generate a new one.</AlertDescription>
+            <AlertDescription>Attendance link has expired. Please generate a new one.</AlertDescription>
           </Alert>
         )}
       </CardContent>
