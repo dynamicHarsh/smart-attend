@@ -18,7 +18,7 @@ interface Coordinate {
   timestamp: number;
 }
 
-const useDiagnosticGeolocation = (sampleSize = 50, timeout = 60000, accuracyThreshold = 2) => {
+const useDiagnosticGeolocation = (sampleSize = 50, timeout = 60000) => {
   const [state, setState] = useState<LocationState>({
     coords: null,
     error: null,
@@ -99,11 +99,10 @@ const useDiagnosticGeolocation = (sampleSize = 50, timeout = 60000, accuracyThre
       error: null,
       accuracy: centroid.accuracy,
       timestamp: centroid.timestamp,
-      isHighAccuracy: centroid.accuracy <= accuracyThreshold,
       provider: 'GPS (Weighted Centroid)',
       status: 'done',
     }));
-  }, [calculateWeightedCentroid, accuracyThreshold]);
+  }, [calculateWeightedCentroid]);
 
   const getLocation = useCallback(() => {
     if (!navigator.geolocation) {
@@ -147,7 +146,7 @@ const useDiagnosticGeolocation = (sampleSize = 50, timeout = 60000, accuracyThre
           },
           accuracy: currentCentroid.accuracy,
           timestamp: currentCentroid.timestamp,
-          isHighAccuracy: currentCentroid.accuracy <= accuracyThreshold,
+          isHighAccuracy: true, // Set to true because enableHighAccuracy is true
         }));
       }
 
@@ -190,7 +189,7 @@ const useDiagnosticGeolocation = (sampleSize = 50, timeout = 60000, accuracyThre
       }
     }, timeout);
 
-  }, [sampleSize, timeout, accuracyThreshold, stopWatching, processSamples, calculateWeightedCentroid]);
+  }, [sampleSize, timeout, stopWatching, processSamples, calculateWeightedCentroid]);
 
   useEffect(() => {
     return () => {

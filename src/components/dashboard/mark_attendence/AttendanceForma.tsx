@@ -1,3 +1,4 @@
+'use client'
 import React, { useState, useEffect } from 'react';
 import { markAttendance } from '@/lib/actions';
 import useDiagnosticGeolocation from '@/hooks/useGeolocation';
@@ -14,7 +15,7 @@ interface Props {
 export default function StudentMarkAttendanceComponent({ linkId, courseId }: Props) {
   const [isMarking, setIsMarking] = useState(false);
   const [result, setResult] = useState<{ success?: string; error?: string; status?: string; isPotentialProxy?: boolean } | null>(null);
-  const { coords, error, accuracy, timestamp, isHighAccuracy, provider, attempts, status, getLocation } = useDiagnosticGeolocation(150, 30000, 2);
+  const { coords, error, accuracy, timestamp, isHighAccuracy, provider, attempts, status, getLocation } = useDiagnosticGeolocation(150, 30000);
 
   const handleMarkAttendance = async () => {
     if (!coords) {
@@ -36,7 +37,7 @@ export default function StudentMarkAttendanceComponent({ linkId, courseId }: Pro
   };
 
   return (
-    <Card className="w-full max-w-md mx-auto">
+    <Card className="w-full  mx-auto">
       <CardHeader>
         <CardTitle className="text-2xl font-bold text-center">Mark Attendance</CardTitle>
       </CardHeader>

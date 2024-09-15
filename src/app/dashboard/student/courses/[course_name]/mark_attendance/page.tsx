@@ -1,5 +1,3 @@
-// app/dashboard/student/courses/[course_name]/page.tsx
-
 import { Suspense } from 'react';
 import { currentProfile } from "@/lib/currentProfile";
 import { redirect } from "next/navigation";
@@ -7,13 +5,16 @@ import ErrorComponent from "@/components/dashboard/mark_attendence/attendence_er
 import LoadingComponent from "@/components/dashboard/mark_attendence/attendence_loading";
 import SuccessComponent from "@/components/dashboard/mark_attendence/attendence_success";
 import StudentMarkAttendanceComponent from '@/components/dashboard/mark_attendence/AttendanceForma';
+import FrequencyDetectionComponent from '@/components/dashboard/mark_attendence/FrequencyDetection'; // Import the new component
 import { getAttendanceButton } from "@/lib/actions";
 import { db } from '@/lib/db';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export const dynamic = 'force-dynamic';
 
 async function AttendanceButton({ courseId, studentId }: { courseId: string, studentId: string }) {
   const result = await getAttendanceButton(studentId, courseId);
+  console.log(result);
 
   if (result.error) {
     return <ErrorComponent message={result.error} />;
@@ -27,9 +28,10 @@ async function AttendanceButton({ courseId, studentId }: { courseId: string, stu
 }
 
 export default async function CoursePage({ params }: { params: { course_name: string } }) {
+  console.log("here", params.course_name);
   const user = await currentProfile();
 
-  if (!user) {
+  if (!user || !user.student) {
     return redirect("/auth/login");
   }
 
@@ -38,7 +40,7 @@ export default async function CoursePage({ params }: { params: { course_name: st
   }
 
   const course = await db.course.findFirst({
-    where: { name: params.course_name },
+    where: { id: params.course_name },
   });
 
   if (!course) {
@@ -50,9 +52,20 @@ export default async function CoursePage({ params }: { params: { course_name: st
       <h1>{course.name}</h1>
       {/* Other course information */}
       
-      <Suspense fallback={<LoadingComponent />}>
-        <AttendanceButton courseId={course.id} studentId={user.id} />
-      </Suspense>
+      <Tabs defaultValue="geolocation">
+        <TabsList>
+          <TabsTrigger value="geolocation">Geolocation</TabsTrigger>
+          <TabsTrigger value="frequency">Frequency</TabsTrigger>
+        </TabsList>
+        <TabsContent value="geolocation">
+          <Suspense fallback={<LoadingComponent />}>
+            <AttendanceButton courseId={course.id} studentId={user.student?.id} />
+          </Suspense>
+        </TabsContent>
+        <TabsContent value="frequency">
+          <FrequencyDetectionComponent />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

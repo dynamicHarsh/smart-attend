@@ -592,7 +592,7 @@ export async function markAttendance(linkId: string, studentLatitude: number, st
     }
 
     // Check if attendance has already been marked for today
-    const sixteenHoursAgo = new Date(Date.now() - 16 * 60 * 60 * 1000);
+    const sixteenHoursAgo = new Date(Date.now() - 60 * 1000);
 
     const existingAttendance = await db.attendanceRecord.findFirst({
       where: {
@@ -610,6 +610,9 @@ export async function markAttendance(linkId: string, studentLatitude: number, st
 
     if (existingAttendance) {
       return { error: "You have already marked your attendance for today" };
+    }
+    if (!attendanceLink.location) {
+      return { error: "Invalid attendance link" };
     }
 
     const [teacherLatitude, teacherLongitude] = attendanceLink.location.split(',').map(Number);
@@ -660,13 +663,16 @@ export async function markAttendance(linkId: string, studentLatitude: number, st
   
   export async function getAttendanceButton(studentId: string, courseId: string) {
     try {
+      console.log(studentId,courseId);
       // Check if the student is enrolled in the course
-      const enrollment = await db.courseEnrollment.findFirst({
+      const enrollment = await db.enrollment.findFirst({
         where: {
           studentId: studentId,
           courseId: courseId,
         },
       });
+      console.log(enrollment);
+    
   
       if (!enrollment) {
         return { show: false };
