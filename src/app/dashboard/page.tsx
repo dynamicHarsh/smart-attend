@@ -10,7 +10,7 @@ const Dashboard = async () => {
     const user = await currentProfile();
 
     if (!user) {
-      redirect("auth/login");
+      redirect("/auth/login");
     }
 
     switch (user.role) {
