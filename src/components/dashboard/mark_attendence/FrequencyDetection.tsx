@@ -234,8 +234,8 @@ export default function SoundReceiver() {
       <CardContent className="space-y-4">
         <Alert>
           <AlertDescription>
-            This receiver listens for frequency-encoded messages. 
-            Make sure you're in range of the transmitting device and the environment is relatively quiet.
+         {"   This receiver listens for frequency-encoded messages. "}
+            {"Make sure you're in range of the transmitting device and the environment is relatively quiet."}
           </AlertDescription>
         </Alert>
 
