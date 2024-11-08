@@ -1,350 +1,391 @@
-'use client'
-import React, { useState, useRef, useCallback } from 'react';
+"use client"
+import React, { useState, useEffect, useRef } from 'react';
+import { generateAttendanceLink } from '@/lib/actions';
+import { motion } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Volume2, Loader2, Radio } from "lucide-react";
+import { Loader2, MapPin, Volume2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
 
-const CARRIER_FREQUENCY = 100;
-const DURATION = 0.1;
-const SAMPLE_RATE = 48000;
+const LOW_FREQ=19000;
+const HIGH_FREQ=19400;
 
-export default function FrequencyTransmissionComponent() {
-  const [message, setMessage] = useState('');
-  const [isTransmitting, setIsTransmitting] = useState(false);
-  const [error, setError] = useState('');
-  const [repetitions, setRepetitions] = useState(3);
-  const [hasAudioPermission, setHasAudioPermission] = useState(false);
-  const [isTestingAudio, setIsTestingAudio] = useState(false);
-  const [frequencyLow, setFrequencyLow] = useState(200);
-  const [frequencyHigh, setFrequencyHigh] = useState(2000);
-  const [progress, setProgress] = useState({ 
-    currentRepetition: 0,
-    estimatedTimeLeft: 0 
+interface Props {
+  teacherId: string;
+  courseId: string;
+}
+
+interface LocationState {
+  accuracy: number;
+  latitude: number;
+  longitude: number;
+  timestamp: number;
+}
+
+export default function GenerateLinkComponent({ teacherId, courseId }: Props) {
+  const [linkData, setLinkData] = useState('');
+  const [expiresAt, setExpiresAt] = useState<Date | null>(null);
+  const [isExpired, setIsExpired] = useState(false);
+  const [domain, setDomain] = useState('');
+  const [isGeneratingLink, setIsGeneratingLink] = useState(false);
+  const [isEmitting, setIsEmitting] = useState(false);
+  const [generatedFrequency, setGeneratedFrequency] = useState<number | null>(null);
+  const [locationError, setLocationError] = useState<string>('');
+  const [permissions, setPermissions] = useState({
+    geolocation: false,
+    speaker: false
   });
+  const [isCheckingPermissions, setIsCheckingPermissions] = useState(false);
+  const [isGettingLocation, setIsGettingLocation] = useState(false);
+  const [locationProgress, setLocationProgress] = useState(0);
+  const [currentLocation, setCurrentLocation] = useState<LocationState | null>(null);
+  const [locationMessage, setLocationMessage] = useState('');
   
   const audioContextRef = useRef<AudioContext | null>(null);
+  const oscillatorRef = useRef<OscillatorNode | null>(null);
   const gainNodeRef = useRef<GainNode | null>(null);
-  const isTransmittingRef = useRef(false);
+  const watchIdRef = useRef<number | null>(null);
+  const locationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const initializeAudio = async () => {
-    console.log('Initializing audio...');
-    try {
-      if (!audioContextRef.current) {
-        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-        gainNodeRef.current = audioContextRef.current.createGain();
-        gainNodeRef.current.gain.value = 0.5;
-        gainNodeRef.current.connect(audioContextRef.current.destination);
-        console.log('AudioContext created successfully');
-      }
+  const MAX_LOCATION_TIME = 5000; // 30 seconds
+  const DESIRED_ACCURACY = 20; // 20 meters
 
-      if (audioContextRef.current.state === 'suspended') {
-        await audioContextRef.current.resume();
-        console.log('AudioContext resumed');
-      }
+  const getLocationPromise = () => {
+    return new Promise<GeolocationPosition>((resolve, reject) => {
+      let bestLocation: LocationState | null = null;
+      setIsGettingLocation(true);
+      setLocationProgress(0);
+      setLocationMessage('Initializing location services...');
 
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach(track => track.stop());
-        setHasAudioPermission(true);
-        console.log('Audio permission granted');
-      } catch (err) {
-        console.error('Failed to get audio permission:', err);
-        setError('Please grant audio permissions to use this feature.');
-        return false;
-      }
+      // Start a timer to update the progress bar
+      const startTime = Date.now();
+      const progressInterval = setInterval(() => {
+        const elapsed = Date.now() - startTime;
+        const progress = (elapsed / MAX_LOCATION_TIME) * 100;
+        setLocationProgress(Math.min(progress, 100));
+      }, 100);
 
-      setError('');
-      return true;
-    } catch (err) {
-      console.error('Error during audio initialization:', err);
-      setError('Failed to initialize audio system. Please try again.');
-      return false;
-    }
-  };
+      // Watch for location updates
+      watchIdRef.current = navigator.geolocation.watchPosition(
+        (position) => {
+          const newLocation = {
+            accuracy: position.coords.accuracy,
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            timestamp: position.timestamp
+          };
 
-  const validateFrequencies = () => {
-    if (frequencyLow <= 0 || frequencyHigh <= 0) {
-      setError('Frequencies must be positive numbers');
-      return false;
-    }
-    if (frequencyLow >= frequencyHigh) {
-      setError('High frequency must be greater than low frequency');
-      return false;
-    }
-    if (frequencyHigh > SAMPLE_RATE / 2) {
-      setError(`High frequency must be less than ${SAMPLE_RATE / 2}Hz`);
-      return false;
-    }
-    return true;
-  };
+          setCurrentLocation(newLocation);
+          
+          // Update message based on accuracy
+          if (newLocation.accuracy > 100) {
+            setLocationMessage(`Getting approximate location... (Accuracy: ${Math.round(newLocation.accuracy)}m)`);
+          } else if (newLocation.accuracy > DESIRED_ACCURACY) {
+            setLocationMessage(`Improving location accuracy... (Accuracy: ${Math.round(newLocation.accuracy)}m)`);
+          } else {
+            setLocationMessage(`High accuracy achieved! (Accuracy: ${Math.round(newLocation.accuracy)}m)`);
+          }
 
-  const playTestTone = async () => {
-    console.log('Starting test tone...');
-    try {
-      if (!validateFrequencies()) return;
-      
-      setIsTestingAudio(true);
-      const initialized = await initializeAudio();
-      if (!initialized) return;
+          // Update best location if this is more accurate
+          if (!bestLocation || newLocation.accuracy < bestLocation.accuracy) {
+            bestLocation = newLocation;
+          }
 
-      if (audioContextRef.current && gainNodeRef.current) {
-        // Play both frequencies in sequence
-        const oscillator = audioContextRef.current.createOscillator();
-        oscillator.type = 'sine';
-        
-        // Play low frequency
-        oscillator.frequency.setValueAtTime(frequencyLow, audioContextRef.current.currentTime);
-        oscillator.connect(gainNodeRef.current);
-        oscillator.start();
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        // Play high frequency
-        oscillator.frequency.setValueAtTime(frequencyHigh, audioContextRef.current.currentTime + 0.1);
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        oscillator.stop();
-        oscillator.disconnect();
-        console.log('Test tones played successfully');
-      }
-    } catch (err) {
-      console.error('Error playing test tone:', err);
-      setError('Error playing test tone. Please try again.');
-    } finally {
-      setIsTestingAudio(false);
-    }
-  };
+          // If we've reached desired accuracy, resolve immediately
+          if (newLocation.accuracy <= DESIRED_ACCURACY) {
+            cleanupLocation();
+            resolve(position);
+          }
+        },
+        (error) => {
+          const errorMessage = getGeolocationErrorMessage(error);
+          setLocationError(errorMessage);
+          cleanupLocation();
+          reject(error);
+        },
+        { 
+          enableHighAccuracy: true,
+          timeout: MAX_LOCATION_TIME,
+          maximumAge: 0
+        }
+      );
 
-  const playFrequency = async (frequency: number, duration: number) => {
-    if (!audioContextRef.current || !gainNodeRef.current) return;
-    
-    return new Promise<void>((resolve, reject) => {
-      try {
-        const oscillator = audioContextRef.current!.createOscillator();
-        oscillator.type = 'sine';
-        oscillator.frequency.setValueAtTime(frequency, audioContextRef.current!.currentTime);
-        oscillator.connect(gainNodeRef.current!);
-        
-        oscillator.onended = () => {
-          oscillator.disconnect();
-          resolve();
-        };
-        
-        oscillator.start();
-        oscillator.stop(audioContextRef.current!.currentTime + duration);
-      } catch (err) {
-        reject(err);
-      }
+      // Set a timeout to resolve with best location after MAX_LOCATION_TIME
+      locationTimeoutRef.current = setTimeout(() => {
+        cleanupLocation();
+        if (bestLocation) {
+          // Create a position object from our best location
+          const position = {
+            coords: {
+              latitude: bestLocation.latitude,
+              longitude: bestLocation.longitude,
+              accuracy: bestLocation.accuracy,
+              altitude: null,
+              altitudeAccuracy: null,
+              heading: null,
+              speed: null
+            },
+            timestamp: bestLocation.timestamp
+          };
+          resolve(position);
+        } else {
+          reject(new Error('Could not get accurate location within timeout'));
+        }
+      }, MAX_LOCATION_TIME);
+
+      // Cleanup function
+      const cleanupLocation = () => {
+        if (watchIdRef.current !== null) {
+          navigator.geolocation.clearWatch(watchIdRef.current);
+          watchIdRef.current = null;
+        }
+        if (locationTimeoutRef.current !== null) {
+          clearTimeout(locationTimeoutRef.current);
+          locationTimeoutRef.current = null;
+        }
+        clearInterval(progressInterval);
+        setIsGettingLocation(false);
+        setLocationProgress(100);
+      };
     });
   };
 
-  const stringToBinary = (str: string) => {
-    const binary = str.split('').map(char => 
-      char.charCodeAt(0).toString(2).padStart(8, '0')
-    ).join('');
-    console.log('Binary message:', binary);
-    return binary;
-  };
-
-  const transmitMessage = async () => {
-    if (!message) {
-      setError('Please enter a message first');
-      return;
-    }
-
-    if (!validateFrequencies()) return;
-
-    try {
-      const initialized = await initializeAudio();
-      if (!initialized) return;
-
-      setError('');
-      setIsTransmitting(true);
-      isTransmittingRef.current = true;
-      
-      const binaryMessage = stringToBinary(message);
-      console.log('Starting transmission of binary message:', binaryMessage);
-      
-      for (let rep = 0; rep < repetitions && isTransmittingRef.current; rep++) {
-        console.log(`Starting repetition ${rep + 1}`);
-        
-        setProgress({
-          currentRepetition: rep + 1,
-          estimatedTimeLeft: (repetitions - rep) * (binaryMessage.length * DURATION)
-        });
-
-        // Play start marker
-        await playFrequency(1500, 0.2);
-        await new Promise(resolve => setTimeout(resolve, 200));
-
-        // Transmit bits
-        for (let i = 0; i < binaryMessage.length && isTransmittingRef.current; i++) {
-          const bit = binaryMessage[i];
-          const frequency = bit === '1' ? frequencyHigh : frequencyLow;
-          console.log(`Transmitting bit ${i}: ${bit} at ${frequency}Hz`);
-          await playFrequency(frequency, DURATION);
-        }
-
-        if (rep < repetitions - 1 && isTransmittingRef.current) {
-          await new Promise(resolve => setTimeout(resolve, 500));
-        }
-      }
-    } catch (error) {
-      console.error('Error during transmission:', error);
-      setError('Error during transmission. Please try again.');
-    } finally {
-      isTransmittingRef.current = false;
-      setIsTransmitting(false);
-      setProgress({ currentRepetition: 0, estimatedTimeLeft: 0 });
+  const getGeolocationErrorMessage = (error: GeolocationPositionError): string => {
+    switch (error.code) {
+      case error.PERMISSION_DENIED:
+        return "Location permission denied. Please enable location access.";
+      case error.POSITION_UNAVAILABLE:
+        return "Location information is unavailable.";
+      case error.TIMEOUT:
+        return "Location request timed out.";
+      default:
+        return "An unknown error occurred while getting location.";
     }
   };
 
-  const stopTransmission = useCallback(() => {
-    console.log('Stopping transmission...');
-    isTransmittingRef.current = false;
-    setIsTransmitting(false);
-    if (audioContextRef.current) {
-      audioContextRef.current.close().then(() => {
-        audioContextRef.current = null;
-        console.log('AudioContext closed');
-      });
-    }
-    setProgress({ currentRepetition: 0, estimatedTimeLeft: 0 });
-  }, []);
-
-  React.useEffect(() => {
+  useEffect(() => {
+    setDomain(window.location.origin);
     return () => {
-      if (audioContextRef.current) {
-        audioContextRef.current.close();
+      stopFrequency();
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+      }
+      if (locationTimeoutRef.current !== null) {
+        clearTimeout(locationTimeoutRef.current);
       }
     };
   }, []);
 
+  // Rest of the existing functions remain the same
+  const generateRandomFrequency = (): number => {
+    return Math.floor(Math.random() * (HIGH_FREQ - LOW_FREQ + 1)) + LOW_FREQ;
+  };
+
+  const checkPermissions = async () => {
+    setIsCheckingPermissions(true);
+    try {
+      const geoPermission = await new Promise((resolve) => {
+        navigator.geolocation.getCurrentPosition(
+          () => resolve(true),
+          () => resolve(false)
+        );
+      });
+
+      const speakerPermission = await new Promise((resolve) => {
+        try {
+          const testContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+          testContext.close();
+          resolve(true);
+        } catch {
+          resolve(false);
+        }
+      });
+
+      setPermissions({
+        geolocation: geoPermission as boolean,
+        speaker: speakerPermission as boolean
+      });
+
+      return geoPermission && speakerPermission;
+    } catch (error) {
+      console.error('Error checking permissions:', error);
+      return false;
+    } finally {
+      setIsCheckingPermissions(false);
+    }
+  };
+
+  const stopFrequency = () => {
+    if (oscillatorRef.current) {
+      oscillatorRef.current.stop();
+      oscillatorRef.current.disconnect();
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+    }
+    setIsEmitting(false);
+  };
+
+  const startFrequencyEmission = (frequency: number) => {
+    audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+    gainNodeRef.current = audioContextRef.current.createGain();
+    gainNodeRef.current.gain.setValueAtTime(0.1, audioContextRef.current.currentTime);
+    gainNodeRef.current.connect(audioContextRef.current.destination);
+
+    oscillatorRef.current = audioContextRef.current.createOscillator();
+    oscillatorRef.current.type = 'sine';
+    oscillatorRef.current.frequency.setValueAtTime(frequency, audioContextRef.current.currentTime);
+    oscillatorRef.current.connect(gainNodeRef.current);
+    oscillatorRef.current.start();
+    setIsEmitting(true);
+  };
+
+  const handleTakeAttendance = async () => {
+    const hasPermissions = await checkPermissions();
+    if (!hasPermissions) {
+      return;
+    }
+
+    setIsGeneratingLink(true);
+    try {
+      const position = await getLocationPromise();
+      const latitude = position.coords.latitude;
+      const longitude = position.coords.longitude;
+
+      console.log('Final Coordinates:', { 
+        latitude, 
+        longitude, 
+        accuracy: position.coords.accuracy 
+      });
+
+      const frequency = generateRandomFrequency();
+      setGeneratedFrequency(frequency);
+      
+      console.log('Generated Frequency:', frequency);
+
+      const result = await generateAttendanceLink(teacherId, courseId, latitude, longitude,frequency);
+      if (result.success) {
+        const url = `${domain}/dashboard/student/courses/${courseId}/mark_attendance?linkId=${result.linkId}`;
+        setLinkData(url);
+        setExpiresAt(new Date(result.expiresAt));
+        setIsExpired(false);
+        
+        console.log('Generated Link:', url);
+        startFrequencyEmission(frequency);
+      } else {
+        console.error('Error generating attendance link:', result.error);
+      }
+    } catch (error) {
+      console.error('Error taking attendance:', error);
+    } finally {
+      setIsGeneratingLink(false);
+    }
+  };
+
   return (
     <Card className="w-full mx-auto">
       <CardHeader>
-        <CardTitle className="text-2xl font-bold text-center">
-          Sound Frequency Transmission
-        </CardTitle>
+        <CardTitle className="text-2xl font-bold text-center">Attendance System</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="space-y-4">
+        <Button
+          onClick={handleTakeAttendance}
+          className="w-full"
+          disabled={isGeneratingLink || isCheckingPermissions || isGettingLocation}
+        >
+          {isCheckingPermissions ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Checking Permissions...
+            </>
+          ) : isGettingLocation ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Getting Location...
+            </>
+          ) : isGeneratingLink ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Generating Link...
+            </>
+          ) : (
+            <>
+              <MapPin className="mr-2 h-4 w-4" />
+              Take Attendance
+            </>
+          )}
+        </Button>
+
+        {isGettingLocation && (
+          <div className="space-y-2">
+            <Progress value={locationProgress} className="w-full" />
+            <p className="text-sm text-center text-muted-foreground">{locationMessage}</p>
+            {currentLocation && (
+              <p className="text-xs text-center text-muted-foreground">
+                Current accuracy: {Math.round(currentLocation.accuracy)}m
+              </p>
+            )}
+          </div>
+        )}
+
+        {isEmitting && (
+          <Button
+            onClick={stopFrequency}
+            className="w-full"
+            variant="destructive"
+          >
+            <Volume2 className="mr-2 h-4 w-4" />
+            Stop Frequency Emission
+          </Button>
+        )}
+
+        {generatedFrequency && (
           <Alert>
             <AlertDescription>
-              This feature transmits your message using sound waves. 
-              Make sure your speakers are on and at a comfortable volume.
+              Emitting frequency: {generatedFrequency} Hz
             </AlertDescription>
           </Alert>
+        )}
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-sm text-gray-500">Low Frequency (Hz)</label>
-              <Input
-                type="number"
-                min="1"
-                max={SAMPLE_RATE / 2}
-                value={frequencyLow}
-                onChange={(e) => setFrequencyLow(Number(e.target.value))}
-                disabled={isTransmitting}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm text-gray-500">High Frequency (Hz)</label>
-              <Input
-                type="number"
-                min="1"
-                max={SAMPLE_RATE / 2}
-                value={frequencyHigh}
-                onChange={(e) => setFrequencyHigh(Number(e.target.value))}
-                disabled={isTransmitting}
-              />
-            </div>
-          </div>
+        {locationError && (
+          <Alert variant="destructive">
+            <AlertDescription>{locationError}</AlertDescription>
+          </Alert>
+        )}
 
-          <Button 
-            onClick={playTestTone} 
-            variant="outline" 
-            className="w-full"
-            disabled={isTestingAudio || isTransmitting}
+        {!permissions.geolocation && (
+          <Alert>
+            <AlertDescription>Geolocation permission is required for attendance.</AlertDescription>
+          </Alert>
+        )}
+
+        {!permissions.speaker && (
+          <Alert>
+            <AlertDescription>Speaker access is required for frequency emission.</AlertDescription>
+          </Alert>
+        )}
+
+        {linkData && !isExpired && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.5 }}
+            className="border p-4 rounded-lg text-center"
           >
-            {isTestingAudio ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Playing Test Tones...
-              </>
-            ) : (
-              <>
-                <Radio className="mr-2 h-4 w-4" />
-                Play Test Tones
-              </>
-            )}
-          </Button>
-
-          <div className="space-y-2">
-            <Input
-              placeholder="Enter your message to transmit"
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              disabled={isTransmitting}
-              className="mb-2"
-            />
-            
-            <div className="flex items-center space-x-2">
-              <Input
-                type="number"
-                min="1"
-                max="10"
-                value={repetitions}
-                onChange={(e) => setRepetitions(Number(e.target.value))}
-                disabled={isTransmitting}
-                className="w-24"
-              />
-              <span className="text-sm text-gray-500">
-                Repetitions (1-10)
-              </span>
-            </div>
-
-            {error && (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-          </div>
-
-          <Button
-            onClick={isTransmitting ? stopTransmission : transmitMessage}
-            className="w-full"
-            variant={isTransmitting ? "destructive" : "default"}
-          >
-            {isTransmitting ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Stop Transmission ({progress.currentRepetition}/{repetitions})
-              </>
-            ) : (
-              <>
-                <Volume2 className="mr-2 h-4 w-4" />
-                Start Transmission
-              </>
-            )}
-          </Button>
-
-          {isTransmitting && progress.currentRepetition > 0 && (
-            <div className="text-sm text-gray-500 text-center">
-              Transmitting repetition {progress.currentRepetition} of {repetitions}
-              <br />
-              Estimated time remaining: {progress.estimatedTimeLeft.toFixed(1)}s
-            </div>
-          )}
-
-          {message && !isTransmitting && (
-            <div className="p-4 bg-gray-100 rounded-lg">
-              <p><strong>Message ready to transmit:</strong></p>
-              <p className="font-mono break-all">{message}</p>
-            </div>
-          )}
-        </div>
+            <h3 className="font-bold mb-2">Attendance Link Generated:</h3>
+            <Input value={linkData} readOnly className="mb-2" />
+            <Button
+              onClick={() => navigator.clipboard.writeText(linkData)}
+              variant="outline"
+              className="w-full"
+            >
+              Copy Link
+            </Button>
+            <p className="mt-2">Expires at: {expiresAt?.toLocaleString()}</p>
+          </motion.div>
+        )}
       </CardContent>
     </Card>
   );

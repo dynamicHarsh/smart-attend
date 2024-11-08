@@ -1,37 +1,22 @@
+// app/courses/[course_name]/mark-attendance/page.tsx
 import { Suspense } from 'react';
 import { currentProfile } from "@/lib/currentProfile";
 import { redirect } from "next/navigation";
 import ErrorComponent from "@/components/dashboard/mark_attendence/attendence_error";
 import LoadingComponent from "@/components/dashboard/mark_attendence/attendence_loading";
-import SuccessComponent from "@/components/dashboard/mark_attendence/attendence_success";
-import StudentMarkAttendanceComponent from '@/components/dashboard/mark_attendence/AttendanceForma';
-import FrequencyDetectionComponent from '@/components/dashboard/mark_attendence/FrequencyDetection'; // Import the new component
-import { getAttendanceButton } from "@/lib/actions";
 import { db } from '@/lib/db';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import AttendanceMarker from '@/components/dashboard/mark_attendence/attendancemarker';
 
 export const dynamic = 'force-dynamic';
 
-async function AttendanceButton({ courseId, studentId }: { courseId: string, studentId: string }) {
-  const result = await getAttendanceButton(studentId, courseId);
-  console.log(result);
-
-  if (result.error) {
-    return <ErrorComponent message={result.error} />;
-  }
-
-  if (!result.show) {
-    return null;
-  }
-
-  return <StudentMarkAttendanceComponent linkId={result.linkId!} courseId={courseId} />;
-}
-
-export default async function CoursePage({ params }: { params: { course_name: string } }) {
-  console.log("here", params.course_name);
+export default async function AttendancePage({ 
+  params 
+}: { 
+  params: { course_name: string } 
+}) {
   const user = await currentProfile();
 
-  if (!user || !user.student) {
+  if (!user?.student) {
     return redirect("/auth/login");
   }
 
@@ -48,24 +33,15 @@ export default async function CoursePage({ params }: { params: { course_name: st
   }
 
   return (
-    <div>
-      <h1>{course.name}</h1>
-      {/* Other course information */}
+    <div className="container mx-auto py-6">
+      <h1 className="text-2xl font-bold mb-6">{course.name} - Mark Attendance</h1>
       
-      <Tabs defaultValue="geolocation">
-        <TabsList>
-          <TabsTrigger value="geolocation">Geolocation</TabsTrigger>
-          <TabsTrigger value="frequency">Frequency</TabsTrigger>
-        </TabsList>
-        <TabsContent value="geolocation">
-          <Suspense fallback={<LoadingComponent />}>
-            <AttendanceButton courseId={course.id} studentId={user.student?.id} />
-          </Suspense>
-        </TabsContent>
-        <TabsContent value="frequency">
-          <FrequencyDetectionComponent />
-        </TabsContent>
-      </Tabs>
+      <Suspense fallback={<LoadingComponent />}>
+        <AttendanceMarker
+          courseId={course.id}
+          studentId={user.student.id}
+        />
+      </Suspense>
     </div>
   );
 }

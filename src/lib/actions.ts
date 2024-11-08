@@ -511,7 +511,7 @@ export async function getStudentsByTeacherAndCourse(
 }
 
 
-export async function generateAttendanceLink(teacherId: string, courseId: string, latitude: number, longitude: number) {
+export async function generateAttendanceLink(teacherId: string, courseId: string, latitude: number, longitude: number,frequency:number) {
   try {
     const teacher = await db.teacher.findUnique({
       where: { id: teacherId },
@@ -537,6 +537,7 @@ export async function generateAttendanceLink(teacherId: string, courseId: string
       data: {
         teacherId: teacher.id,
         courseId,
+        frequency,
         expiresAt,
         location: `${latitude},${longitude}`,
       },
@@ -553,7 +554,7 @@ export async function generateAttendanceLink(teacherId: string, courseId: string
   }
 }
 
-export async function markAttendance(linkId: string, studentLatitude: number, studentLongitude: number) {
+export async function markAttendance(linkId: string, studentLatitude: number, studentLongitude: number,frequencyDetected:number) {
   try {
     // Get the current user (student)
     const currentUser = await currentProfile();
@@ -592,7 +593,7 @@ export async function markAttendance(linkId: string, studentLatitude: number, st
     }
 
     // Check if attendance has already been marked for today
-    const sixteenHoursAgo = new Date(Date.now() - 60 * 1000);
+    const sixteenHoursAgo = new Date(Date.now() -60*1000);
 
     const existingAttendance = await db.attendanceRecord.findFirst({
       where: {
@@ -629,10 +630,16 @@ export async function markAttendance(linkId: string, studentLatitude: number, st
     // Determine attendance status and potential proxy
     let status: AttendanceStatus = AttendanceStatus.PRESENT;
     let isPotentialProxy = false;
+    
 
       if (distance > DISTANCE_THRESHOLD) {
         status = AttendanceStatus.ABSENT;
         isPotentialProxy = true;
+      }
+
+      if(attendanceLink.frequency && (frequencyDetected<=attendanceLink.frequency+10 || frequencyDetected>=attendanceLink.frequency-10)){
+           status=AttendanceStatus.PRESENT;
+           isPotentialProxy=false;
       }
   
       // Mark attendance
@@ -671,7 +678,7 @@ export async function markAttendance(linkId: string, studentLatitude: number, st
           courseId: courseId,
         },
       });
-      console.log(enrollment);
+      console.log("here it is coming",enrollment);
     
   
       if (!enrollment) {

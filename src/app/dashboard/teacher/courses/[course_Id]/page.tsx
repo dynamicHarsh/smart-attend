@@ -41,8 +41,7 @@ const TeacherPage = async ({params:{course_Id}}:Props) => {
 
   return (
     <div className="ml-2">
-      <GenerateQRCodeComponent />
-      <SoundReceiver/>
+      <GenerateQRCodeComponent  courseId={course_Id} teacherId={teacher?.teacher?.id} />
             <h1 className="mb-8  text-2xl font-semibold">Students Enrolled</h1>
       {isStudentsResponse(studentsResponse) && (
         <div className=" w-full grid grid-cols-1 gap-2 sm:grid-cols-1 md:grid-cols-2  xl:grid-cols-3">

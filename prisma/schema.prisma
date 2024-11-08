@@ -93,6 +93,7 @@ model AttendanceLink {
   attendanceRecords AttendanceRecord[]
   teacherId         String
   courseId          String
+  frequency         Int?
   teacher           Teacher            @relation("TeacherAttendanceLinks", fields: [teacherId], references: [id])
   course            Course             @relation("CourseAttendanceLinks", fields: [courseId], references: [id])
   expiresAt         DateTime
