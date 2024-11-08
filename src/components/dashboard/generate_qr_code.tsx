@@ -51,9 +51,21 @@ export default function GenerateLinkComponent({ teacherId, courseId }: Props) {
 
   const MAX_LOCATION_TIME = 5000; // 30 seconds
   const DESIRED_ACCURACY = 20; // 20 meters
+  type CustomPosition = {
+    coords: {
+        latitude: number;
+        longitude: number;
+        accuracy: number;
+        altitude: number | null;
+        altitudeAccuracy: number | null;
+        heading: number | null;
+        speed: number | null;
+    };
+    timestamp: number;
+};
 
   const getLocationPromise = () => {
-    return new Promise<GeolocationPosition>((resolve, reject) => {
+    return new Promise<CustomPosition>((resolve, reject) => {
       let bestLocation: LocationState | null = null;
       setIsGettingLocation(true);
       setLocationProgress(0);
@@ -117,7 +129,7 @@ export default function GenerateLinkComponent({ teacherId, courseId }: Props) {
         cleanupLocation();
         if (bestLocation) {
           // Create a position object from our best location
-          const position = {
+          const position:CustomPosition = {
             coords: {
               latitude: bestLocation.latitude,
               longitude: bestLocation.longitude,

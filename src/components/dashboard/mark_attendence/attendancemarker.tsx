@@ -334,7 +334,7 @@ export default function AttendanceMarker({
       if (result.success) {
         setStep('completed');
       } else {
-        setError(result.error);
+        setError(result.error as string);
       }
     } catch (err: any) {
       setError('Failed to mark attendance: ' + err.message);
