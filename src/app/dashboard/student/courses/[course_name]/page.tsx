@@ -1,17 +1,25 @@
-import { Button } from "@/components/ui/button"
-import Link from "next/link"
 
-const CoursePage = () => {
+import { TableDemo } from "@/components/admin_dashboard/components/TableDemo";
+import { useParams } from 'next/navigation';
+import { currentProfile } from "@/lib/currentProfile";
+import { Button } from "@/components/ui/button"; 
+import Link from "next/link";
+
+const CoursePage = async ({ 
+  params 
+}: { 
+  params: { course_name: string } 
+}) => {
+  const course_name  = params.course_name;
+  const profile = await currentProfile();
+
   return (
-    <div className="p-4">
-      <h1 className="text-2xl font-bold mb-4">Attendance Record of This Subject</h1>
-      <Link href="/dashboard/student/courses/4f370980-4df4-4f32-8182-f0cc3f40ec69/mark_attendance">
-        <Button variant="default">
-          Mark Attendance
-        </Button>
-      </Link>
+    <div>
+      <Link href={`${course_name}/mark_attendance`}><Button className='w-full mt-6'>Mark Attendance</Button></Link>
+      
+      <TableDemo studentId={profile?.student?.id} courseId={course_name} />
     </div>
-  )
-}
+  );
+};
 
-export default CoursePage
+export default CoursePage;

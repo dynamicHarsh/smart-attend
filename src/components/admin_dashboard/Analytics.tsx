@@ -1,8 +1,9 @@
+import { TableDemo } from "./components/TableDemo";
 
 const Analytics = () => {
   return (
-    <div>TODO </div>
-  )
-}
+    <TableDemo/>
+  );
+};
 
-export default Analytics
+export default Analytics;

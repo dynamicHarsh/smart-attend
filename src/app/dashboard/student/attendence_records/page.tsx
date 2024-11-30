@@ -1,6 +1,10 @@
-const Attendence = () => {
+import { currentProfile } from "@/lib/currentProfile";
+import { TableDemo } from "@/components/admin_dashboard/components/TableDemo";
+
+const Attendence =async () => {
+  const profile=await currentProfile();
   return (
-    <div>TODO</div>
+    <TableDemo studentId={profile?.student?.id}/>
   )
 }
 

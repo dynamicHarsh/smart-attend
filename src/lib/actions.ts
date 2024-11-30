@@ -2,6 +2,7 @@
 import * as z from "zod";
 
 import bcrypt from "bcryptjs";
+import { Prisma } from '@prisma/client'
 import { db } from "./db";
 
 import { signIn } from "./auth";
@@ -852,3 +853,67 @@ export async function getAllStudents() {
     return { error: "Error while fetching students" };
   }
 }
+
+
+
+export const getAttendanceRecords = async (
+  studentId: string | null = null, 
+  courseId: string | null = null, 
+  teacherId: string | null = null
+) => {
+  try {
+    const query: Prisma.AttendanceRecordFindManyArgs = {
+      where: {},
+      include: {
+        student: {
+          include: {
+            user: true, // Include user details of the student
+          },
+        },
+        course: true, // Include course details
+        teacher: {
+          include: {
+            user: true, // Include user details of the teacher
+          },
+        },
+        attendanceLink: true, // Include attendance link if needed
+      },
+      orderBy: {
+        date: 'desc', // Order by date descending
+      },
+    };
+
+    // Add conditions based on the provided studentId, courseId, or teacherId
+    if (studentId) {
+      query.where = {
+        ...query.where,
+        studentId: studentId
+      };
+    }
+
+    if (courseId) {
+      query.where = {
+        ...query.where,
+        courseId: courseId
+      };
+    }
+
+    if (teacherId) {
+      query.where = {
+        ...query.where,
+        teacherId: teacherId
+      };
+    }
+
+    console.log(studentId);
+
+    // Fetch the attendance records based on the constructed query
+    const attendanceRecords = await db.attendanceRecord.findMany(query);
+    console.log(attendanceRecords[0]);
+
+    return attendanceRecords;
+  } catch (error) {
+    console.error("Error fetching attendance records:", error);
+    throw new Error("Unable to fetch attendance records.");
+  }
+};
