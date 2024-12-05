@@ -1,16 +1,16 @@
 "use client"
 import React, { useState, useEffect, useRef } from 'react';
-import { generateAttendanceLink } from '@/lib/actions';
+import { generateAttendanceLink, killAttendanceSession } from '@/lib/actions';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, MapPin, Volume2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
+import { toast } from '@/hooks/use-toast';
 
-const LOW_FREQ=19000;
-const HIGH_FREQ=19400;
+const LOW_FREQ = 19000;
+const HIGH_FREQ = 19400;
 
 interface Props {
   teacherId: string;
@@ -33,6 +33,7 @@ export default function GenerateLinkComponent({ teacherId, courseId }: Props) {
   const [isEmitting, setIsEmitting] = useState(false);
   const [generatedFrequency, setGeneratedFrequency] = useState<number | null>(null);
   const [locationError, setLocationError] = useState<string>('');
+  const [attendanceLinkId,setAttendanceLinkId]=useState("");
   const [permissions, setPermissions] = useState({
     geolocation: false,
     speaker: false
@@ -190,7 +191,6 @@ export default function GenerateLinkComponent({ teacherId, courseId }: Props) {
     };
   }, []);
 
-  // Rest of the existing functions remain the same
   const generateRandomFrequency = (): number => {
     return Math.floor(Math.random() * (HIGH_FREQ - LOW_FREQ + 1)) + LOW_FREQ;
   };
@@ -255,8 +255,36 @@ export default function GenerateLinkComponent({ teacherId, courseId }: Props) {
   };
 
   const handleTakeAttendance = async () => {
+    // If currently emitting, stop the session
+    if (isEmitting) {
+      try {
+        await killAttendanceSession(attendanceLinkId);
+        stopFrequency();
+        toast({
+          title: 'Attendance Session Stopped',
+          description: 'The attendance session has been terminated.',
+          variant: 'default'
+        });
+        setGeneratedFrequency(null);
+        return;
+      } catch (error) {
+        toast({
+          title: 'Error Stopping Attendance',
+          description: 'Failed to stop the attendance session.',
+          variant: 'destructive'
+        });
+        return;
+      }
+    }
+
+    // Check and request permissions
     const hasPermissions = await checkPermissions();
     if (!hasPermissions) {
+      toast({
+        title: 'Permission Denied',
+        description: 'Please grant location and speaker permissions.',
+        variant: 'destructive'
+      });
       return;
     }
 
@@ -266,31 +294,38 @@ export default function GenerateLinkComponent({ teacherId, courseId }: Props) {
       const latitude = position.coords.latitude;
       const longitude = position.coords.longitude;
 
-      console.log('Final Coordinates:', { 
-        latitude, 
-        longitude, 
-        accuracy: position.coords.accuracy 
-      });
-
       const frequency = generateRandomFrequency();
       setGeneratedFrequency(frequency);
       
-      console.log('Generated Frequency:', frequency);
-
-      const result = await generateAttendanceLink(teacherId, courseId, latitude, longitude,frequency);
+      const result = await generateAttendanceLink(teacherId, courseId, latitude, longitude, frequency);
       if (result.success) {
         const url = `${domain}/dashboard/student/courses/${courseId}/mark_attendance?linkId=${result.linkId}`;
         setLinkData(url);
         setExpiresAt(new Date(result.expiresAt));
         setIsExpired(false);
+        setAttendanceLinkId(result.linkId);
         
-        console.log('Generated Link:', url);
         startFrequencyEmission(frequency);
+        
+        toast({
+          title: 'Attendance Started',
+          description: 'Attendance link generated and frequency emission started.',
+          variant: 'default'
+        });
       } else {
-        console.error('Error generating attendance link:', result.error);
+        toast({
+          
+          title: 'Error Generating Link',
+          description: result.error || 'Failed to generate attendance link.',
+          variant: 'destructive'
+        });
       }
     } catch (error) {
-      console.error('Error taking attendance:', error);
+      toast({
+        title: 'Attendance Error',
+        description: 'An error occurred while taking attendance.',
+        variant: 'destructive'
+      });
     } finally {
       setIsGeneratingLink(false);
     }
@@ -305,7 +340,8 @@ export default function GenerateLinkComponent({ teacherId, courseId }: Props) {
         <Button
           onClick={handleTakeAttendance}
           className="w-full"
-          disabled={isGeneratingLink || isCheckingPermissions || isGettingLocation}
+          disabled={isCheckingPermissions || isGettingLocation}
+          variant={isEmitting ? "destructive" : "default"}
         >
           {isCheckingPermissions ? (
             <>
@@ -317,10 +353,10 @@ export default function GenerateLinkComponent({ teacherId, courseId }: Props) {
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               Getting Location...
             </>
-          ) : isGeneratingLink ? (
+          ) : isEmitting ? (
             <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Generating Link...
+              <Volume2 className="mr-2 h-4 w-4" />
+              Stop Taking Attendance
             </>
           ) : (
             <>
@@ -336,67 +372,34 @@ export default function GenerateLinkComponent({ teacherId, courseId }: Props) {
             <p className="text-sm text-center text-muted-foreground">{locationMessage}</p>
             {currentLocation && (
               <p className="text-xs text-center text-muted-foreground">
-                Current accuracy: {Math.round(currentLocation.accuracy)}m
+                Current accuracy: {Math.round(currentLocation.accuracy)}
               </p>
             )}
           </div>
         )}
 
-        {isEmitting && (
-          <Button
-            onClick={stopFrequency}
-            className="w-full"
-            variant="destructive"
-          >
-            <Volume2 className="mr-2 h-4 w-4" />
-            Stop Frequency Emission
-          </Button>
-        )}
-
         {generatedFrequency && (
-          <Alert>
-            <AlertDescription>
-              Emitting frequency: {generatedFrequency} Hz
-            </AlertDescription>
-          </Alert>
+          <div className="text-center text-sm text-muted-foreground">
+            Frequency Emission Active: {generatedFrequency} Hz
+          </div>
         )}
 
         {locationError && (
-          <Alert variant="destructive">
-            <AlertDescription>{locationError}</AlertDescription>
-          </Alert>
+          <div className="text-center text-sm text-destructive">
+            {locationError}
+          </div>
         )}
 
         {!permissions.geolocation && (
-          <Alert>
-            <AlertDescription>Geolocation permission is required for attendance.</AlertDescription>
-          </Alert>
+          <div className="text-center text-sm text-destructive">
+            Geolocation permission is required for attendance.
+          </div>
         )}
 
         {!permissions.speaker && (
-          <Alert>
-            <AlertDescription>Speaker access is required for frequency emission.</AlertDescription>
-          </Alert>
-        )}
-
-        {linkData && !isExpired && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.5 }}
-            className="border p-4 rounded-lg text-center"
-          >
-            <h3 className="font-bold mb-2">Attendance Link Generated:</h3>
-            <Input value={linkData} readOnly className="mb-2" />
-            <Button
-              onClick={() => navigator.clipboard.writeText(linkData)}
-              variant="outline"
-              className="w-full"
-            >
-              Copy Link
-            </Button>
-            <p className="mt-2">Expires at: {expiresAt?.toLocaleString()}</p>
-          </motion.div>
+          <div className="text-center text-sm text-destructive">
+            Speaker access is required for frequency emission.
+          </div>
         )}
       </CardContent>
     </Card>

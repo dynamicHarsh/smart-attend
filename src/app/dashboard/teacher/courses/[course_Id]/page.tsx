@@ -12,6 +12,7 @@ interface Student {
   username: string;
   email: string;
   branch: string;
+  id:string;
 }
 type Props={
   params:{
@@ -42,12 +43,12 @@ const TeacherPage = async ({params:{course_Id}}:Props) => {
   return (
     <div className="ml-2">
       <GenerateQRCodeComponent  courseId={course_Id} teacherId={teacher?.teacher?.id} />
-            <h1 className="mb-8  text-2xl font-semibold">Students Enrolled</h1>
+            <h1 className="mb-8  mt-8 text-2xl font-semibold">Students Enrolled</h1>
       {isStudentsResponse(studentsResponse) && (
         <div className=" w-full grid grid-cols-1 gap-2 sm:grid-cols-1 md:grid-cols-2  xl:grid-cols-3">
           {studentsResponse.students.map((student) => (
              <div key={student.email} className="col-span-1">
-            <StudentCard key={student.username} student={student} />
+            <StudentCard key={student.username} student={student} courseId={course_Id} />
             </div>
           ))}
         </div>

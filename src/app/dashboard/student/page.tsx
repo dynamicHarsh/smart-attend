@@ -28,7 +28,7 @@ const StudentPage = async () => {
     <div className="ml-2">
     
 
-        <h2>Enrolled Courses</h2>
+        <h2 className="text-2xl mb-8 font-semibold">Subjects</h2>
         {isEnrolledCoursesResponse(enrolledCoursesResponse) ? (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3">
           {enrolledCoursesResponse.courses.map((course) => (

@@ -13,20 +13,23 @@ interface SuccessComponentProps {
 const SuccessComponent: React.FC<SuccessComponentProps> = ({ message, status, isPotentialProxy }) => {
   return (
     <Card className="max-w-md mx-auto mt-8">
+      {status===AttendanceStatus.PRESENT && (
       <CardHeader>
-        <CardTitle className="text-2xl font-bold text-green-700 flex items-center">
+        <CardTitle className="text-2xl font-bold text-green-700 mb-4 flex items-center">
           <CheckCircle className="w-8 h-8 text-green-500 mr-2" />
           Success!
         </CardTitle>
-      </CardHeader>
-      <CardContent>
         <p className="text-gray-700 mb-4">{message}</p>
+      </CardHeader>
+      )}
+      <CardContent>
+        
         
         {status === AttendanceStatus.ABSENT && (
           <Alert variant="destructive" className="mb-4">
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
-              Your attendance was marked as absent due to location mismatch.
+            It appears that you are not physically present in the classroom
             </AlertDescription>
           </Alert>
         )}

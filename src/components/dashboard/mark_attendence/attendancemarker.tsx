@@ -3,24 +3,33 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, MapPin, CheckCircle, Volume2 } from "lucide-react";
+import { Loader2, CheckCircle } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { getAttendanceButton, markAttendance } from '@/lib/actions';
+import SuccessComponent from './attendence_success';
+import { AttendanceStatus } from '@prisma/client';
 
 // Constants for audio processing
 const SAMPLE_RATE = 48000;
 const FFT_SIZE = 32768;
-const LOW_FREQ = 18999;  // Low end of the frequency range
+const LOW_FREQ = 15999;  // Low end of the frequency range
 const HIGH_FREQ = 19401; // High end of the frequency range
-const LISTENING_DURATION = 5000; // 5 seconds
-const MAX_LOCATION_TIME = 12000; // 15 seconds
-const DESIRED_ACCURACY = 20; // 20 meters
+const LISTENING_DURATION = 7000; // 5 seconds
+const MAX_LOCATION_TIME = 13000; // 15 seconds
+const DESIRED_ACCURACY = 5; // 20 meters
+
 type FrequencyDataPoint = {
   freq: number;
   magnitude: number;
 };
 
-export default function AttendanceMarker({ 
+type AttendanceResult = {
+  success: string;
+  isPotentialProxy: boolean;
+  status: AttendanceStatus;
+};
+
+export default function SimplifiedAttendanceMarker({ 
   courseId,
   studentId
 }: {
@@ -28,21 +37,14 @@ export default function AttendanceMarker({
   studentId: string
 }) {
   // States for the entire flow
-  const [step, setStep] = useState('initial'); // initial, location, frequency, submitting
+  const [step, setStep] = useState<'initial' | 'location' | 'frequency' | 'submitting' | 'completed'>('initial');
   const [error, setError] = useState<string | null>(null);
-  const [frequencyDetected, setFrequencyDetected] = useState(false);
-  const [locationVerified, setLocationVerified] = useState(false);
   const [attendanceData, setAttendanceData] = useState<any>(null);
-  const [detectedFrequency, setDetectedFrequency] = useState<FrequencyDataPoint>({freq:0,magnitude:-1000});
-  const [isListening, setIsListening] = useState(false);
-  const [frequencyData, setFrequencyData] = useState<FrequencyDataPoint[]>([]);
-  const [targetFrequency, setTargetFrequency] = useState<number | null>(null);
-  const [targetMagnitude, setTargetMagnitude] = useState<number | null>(null);
-  const [matchFound, setMatchFound] = useState<boolean | null>(null);
+  const [detectedFrequency, setDetectedFrequency] = useState<FrequencyDataPoint>({freq:0, magnitude:-1000});
+  const [success, setSuccess] = useState<AttendanceResult | null>(null);
 
   // Location states
   const [locationError, setLocationError] = useState('');
-  const [isGettingLocation, setIsGettingLocation] = useState(false);
   const [locationProgress, setLocationProgress] = useState(0);
   const [currentLocation, setCurrentLocation] = useState<{
     accuracy: number;
@@ -58,9 +60,33 @@ export default function AttendanceMarker({
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const listeningTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const animationFrameRef = useRef<number>();
 
+  // Cleanup functions
+  const cleanupLocation = () => {
+    if (watchIdRef.current !== null) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+    if (locationTimeoutRef.current !== null) {
+      clearTimeout(locationTimeoutRef.current);
+      locationTimeoutRef.current = null;
+    }
+  };
+
+  const cleanupAudio = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+    }
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
+  };
+
+  // Initial check for attendance availability
   useEffect(() => {
     const checkAttendance = async () => {
       try {
@@ -82,130 +108,12 @@ export default function AttendanceMarker({
     checkAttendance();
 
     return () => {
-      if (watchIdRef.current !== null) {
-        navigator.geolocation.clearWatch(watchIdRef.current);
-      }
-      if (locationTimeoutRef.current !== null) {
-        clearTimeout(locationTimeoutRef.current);
-      }
+      cleanupLocation();
       cleanupAudio();
     };
   }, [studentId, courseId]);
 
-  useEffect(() => {
-    return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
-      cleanupAudio();
-    };
-  }, []);
-
-  const cleanupAudio = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-    }
-    if (audioContextRef.current) {
-      audioContextRef.current.close();
-    }
-    setIsListening(false);
-  };
-
-  
-  const processAudioData = () => {
-    if (!analyserRef.current) return;
-
-    const bufferLength = analyserRef.current.frequencyBinCount;
-    const dataArray = new Float32Array(bufferLength);
-    analyserRef.current.getFloatFrequencyData(dataArray);
-
-    const frequencyBinSize = SAMPLE_RATE / FFT_SIZE;
-  
-    const newData: FrequencyDataPoint[] = [];
-    const startIndex = Math.floor(LOW_FREQ / frequencyBinSize);
-    const endIndex = Math.floor(HIGH_FREQ / frequencyBinSize);
-    console.log(bufferLength);
-
-    for (let i = startIndex; i < endIndex; i += 1) {
-    
-      const freq = i * frequencyBinSize;
-      const magnitude = dataArray[i];
-      
-      // Filter frequencies within the specified range
-      if (freq >= LOW_FREQ && freq <= HIGH_FREQ && !isNaN(magnitude) && isFinite(magnitude) && magnitude>-100) {
-        newData.push({
-          freq: Math.round(freq),
-          magnitude: Math.round(magnitude)
-        });
-      }
-    }
-    
-    
-    const found=newData.sort((a, b) => b.magnitude - a.magnitude)?.[0]
-    if(found){
-      setDetectedFrequency((prev)=>prev?.magnitude>found.magnitude?prev:found);
-     
-     
-    }
-    
-    // setDetectedFrequency(found.freq);
-    
-    animationFrameRef.current = requestAnimationFrame(processAudioData);
-  };
-
-  
-  const startListening = async () => {
-    try {
-      setError(null);
-      setIsListening(true);
-
-      setTimeout(()=>{
-        stopListening();
-        setFrequencyDetected(true);
-        
-      },LISTENING_DURATION)
-
-
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false,
-          channelCount: 1,
-          sampleRate: SAMPLE_RATE
-        }
-      });
-
-      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-      analyserRef.current = audioContextRef.current.createAnalyser();
-      analyserRef.current.fftSize = FFT_SIZE;
-      analyserRef.current.smoothingTimeConstant = 0.5;
-
-      const source = audioContextRef.current.createMediaStreamSource(stream);
-      source.connect(analyserRef.current);
-      
-      streamRef.current = stream;
-       if(stream){
-      processAudioData();
-       }
-
-    } catch (err) {
-      console.error('Error in startListening:', err);
-      setError(err instanceof Error ? err.message : 'Failed to access microphone');
-      setIsListening(false);
-    }
-  };
-
-  const stopListening = () => {
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-    }
-    cleanupAudio();
-  };
-
-
- 
-
+  // Geolocation error handling
   const getGeolocationErrorMessage = (error: GeolocationPositionError): string => {
     switch (error.code) {
       case error.PERMISSION_DENIED:
@@ -219,10 +127,11 @@ export default function AttendanceMarker({
     }
   };
 
+  // Location verification promise
   const getLocationPromise = () => {
     return new Promise<GeolocationPosition>((resolve, reject) => {
       let bestLocation: GeolocationPosition | null = null;
-      setIsGettingLocation(true);
+      setStep('location');
       setLocationProgress(0);
       setLocationMessage('Initializing location services...');
 
@@ -257,15 +166,14 @@ export default function AttendanceMarker({
           }
 
           if (position.coords.accuracy <= DESIRED_ACCURACY) {
-            cleanupLocation();
-            setLocationVerified(true);
+            cleanupLocationTracking();
             resolve(position);
           }
         },
         (error) => {
           const errorMessage = getGeolocationErrorMessage(error);
           setLocationError(errorMessage);
-          cleanupLocation();
+          cleanupLocationTracking();
           reject(error);
         },
         { 
@@ -276,16 +184,15 @@ export default function AttendanceMarker({
       );
 
       locationTimeoutRef.current = setTimeout(() => {
-        cleanupLocation();
+        cleanupLocationTracking();
         if (bestLocation) {
-          setLocationVerified(true);
           resolve(bestLocation);
         } else {
           reject(new Error('Could not get accurate location within timeout'));
         }
       }, MAX_LOCATION_TIME);
 
-      const cleanupLocation = () => {
+      const cleanupLocationTracking = () => {
         if (watchIdRef.current !== null) {
           navigator.geolocation.clearWatch(watchIdRef.current);
           watchIdRef.current = null;
@@ -295,58 +202,152 @@ export default function AttendanceMarker({
           locationTimeoutRef.current = null;
         }
         clearInterval(progressInterval);
-        setIsGettingLocation(false);
         setLocationProgress(100);
       };
     });
   };
 
-  const handleVerifyLocation = async () => {
-    try {
-      const position = await getLocationPromise();
-      setCurrentLocation({
-        accuracy: position.coords.accuracy,
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude,
-        timestamp: position.timestamp
-      });
-      setStep('location');
-    } catch (err: any) {
-      setLocationError(err.message);
-    }
+  // Frequency detection logic
+  const detectFrequency = () => {
+    return new Promise<FrequencyDataPoint>((resolve, reject) => {
+      setStep('frequency');
+      
+      const startListening = async () => {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              echoCancellation: false,
+              noiseSuppression: false,
+              autoGainControl: false,
+              channelCount: 1,
+              sampleRate: SAMPLE_RATE
+            }
+          });
+
+          audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+          analyserRef.current = audioContextRef.current.createAnalyser();
+          analyserRef.current.fftSize = FFT_SIZE;
+          analyserRef.current.smoothingTimeConstant = 0.5;
+
+          const source = audioContextRef.current.createMediaStreamSource(stream);
+          source.connect(analyserRef.current);
+          streamRef.current = stream;
+
+          let detectedFreq: FrequencyDataPoint = {freq: 0, magnitude: -1000};
+
+          const processAudioData = () => {
+            if (!analyserRef.current) return;
+
+            const bufferLength = analyserRef.current.frequencyBinCount;
+            const dataArray = new Float32Array(bufferLength);
+            analyserRef.current.getFloatFrequencyData(dataArray);
+
+            const frequencyBinSize = SAMPLE_RATE / FFT_SIZE;
+          
+            const newData: FrequencyDataPoint[] = [];
+            const startIndex = Math.floor(LOW_FREQ / frequencyBinSize);
+            const endIndex = Math.floor(HIGH_FREQ / frequencyBinSize);
+
+            for (let i = startIndex; i < endIndex; i += 1) {
+              const freq = i * frequencyBinSize;
+              const magnitude = dataArray[i];
+              
+              if (freq >= LOW_FREQ && freq <= HIGH_FREQ && !isNaN(magnitude) && isFinite(magnitude) && magnitude > -100) {
+                newData.push({
+                  freq: Math.round(freq),
+                  magnitude: Math.round(magnitude)
+                });
+              }
+            }
+            
+            const found = newData.sort((a, b) => b.magnitude - a.magnitude)?.[0];
+            if (found && found.magnitude > detectedFreq.magnitude) {
+              detectedFreq = found;
+            }
+          };
+
+          const audioInterval = setInterval(processAudioData, 100);
+
+          setTimeout(() => {
+            clearInterval(audioInterval);
+            cleanupAudio();
+            resolve(detectedFreq);
+          }, LISTENING_DURATION);
+
+        } catch (err) {
+          cleanupAudio();
+          reject(err);
+        }
+      };
+
+      startListening();
+    });
   };
 
-  const handleMarkAttendance = async () => {
-    if (!locationVerified || !frequencyDetected || !attendanceData?.linkId || !currentLocation || !detectedFrequency) {
-      setError('Please complete both location and frequency verification');
-      return;
-    }
-
+  // Main attendance marking logic
+  const handleAttendanceProcess = async () => {
     try {
+      // Reset any previous errors
+      setError(null);
+
+      // Verify location first
+      const locationPosition = await getLocationPromise();
+      const locationDetails = {
+        accuracy: locationPosition.coords.accuracy,
+        latitude: locationPosition.coords.latitude,
+        longitude: locationPosition.coords.longitude,
+        timestamp: locationPosition.timestamp
+      };
+      setCurrentLocation(locationDetails);
+
+      // Then detect frequency
+      const frequencyData = await detectFrequency();
+      setDetectedFrequency(frequencyData);
+
+      // Finally mark attendance
+      if (!attendanceData?.linkId) {
+        throw new Error('No active attendance session');
+      }
+
       setStep('submitting');
-      const result = await markAttendance(
+      const result:any = await markAttendance(
         attendanceData.linkId, 
-        currentLocation.latitude,
-        currentLocation.longitude,
-        detectedFrequency.freq
+        locationDetails.latitude,
+        locationDetails.longitude,
+        frequencyData.freq
       );
       
       if (result.success) {
         setStep('completed');
+        setSuccess(result as any);
       } else {
         setError(result.error as string);
       }
     } catch (err: any) {
-      setError('Failed to mark attendance: ' + err.message);
+      setError(err.message || 'Failed to complete attendance process');
+      setStep('initial');
     }
   };
 
+  // Render logic
   if (error) {
     return (
-      <Alert variant="destructive">
-        <AlertDescription>{error}</AlertDescription>
-      </Alert>
+      <Card className="w-full mx-auto">
+        <CardContent>
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        </CardContent>
+      </Card>
     );
+  }
+  if(success){
+   
+    return(
+      <div>
+        <SuccessComponent message={success.success} isPotentialProxy={success.isPotentialProxy} status={success.status} />
+      </div>
+    )
   }
 
   if (!attendanceData) {
@@ -359,109 +360,71 @@ export default function AttendanceMarker({
         <CardTitle className="text-2xl font-bold text-center">Mark Attendance</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Location Verification Section */}
-        <div className="space-y-2">
-          <h3 className="font-semibold">Step 1: Verify Location</h3>
-          <Button
-            onClick={handleVerifyLocation}
-            className="w-full"
-            variant="outline"
-            disabled={locationVerified || isGettingLocation}
-          >
-            {isGettingLocation ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Getting Location...
-              </>
-            ) : (
-              <>
-                <MapPin className="mr-2 h-4 w-4" />
-                Verify Location
-              </>
-            )}
-          </Button>
-
-          {isGettingLocation && (
-            <div className="space-y-2">
-              <Progress value={locationProgress} className="w-full" />
-              <p className="text-sm text-center text-muted-foreground">{locationMessage}</p>
-              {currentLocation && (
-                <p className="text-xs text-center text-muted-foreground">
-                  Current accuracy: {Math.round(currentLocation.accuracy)}m
-                </p>
-              )}
-            </div>
-          )}
-
-          {locationError && (
-            <Alert variant="destructive">
-              <AlertDescription>{locationError}</AlertDescription>
-            </Alert>
-          )}
-
-          {locationVerified && (
-            <Alert>
-              <AlertDescription>Location verified successfully!</AlertDescription>
-            </Alert>
-          )}
-        </div>
-
-        {/* Frequency Detection Section */}
-        {locationVerified && (
+        {/* Location Progress */}
+        {(step === 'location' || step === 'frequency' || step === 'submitting') && (
           <div className="space-y-2">
-            <h3 className="font-semibold">Step 2: Verify Presence</h3>
-            <Button
-              onClick={startListening}
-              className="w-full"
-              variant="outline"
-              disabled={isListening || frequencyDetected}
-            >
-              {isListening ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Listening for Signal...
-                </>
-              ) : (
-                <>
-                  <Volume2 className="mr-2 h-4 w-4" />
-                  Start Frequency Detection
-                </>
-              )}
-            </Button>
-
-            
-              <Alert>
-                <AlertDescription>
-                  Signal detected successfully! (Frequency: {detectedFrequency?.freq}Hz) (Magnitude:{detectedFrequency.magnitude})
-                </AlertDescription>
-              </Alert>
-            
+            <Progress 
+              value={
+                step === 'location' ? locationProgress : 
+                step === 'frequency' ? 50 : 
+                step === 'submitting' ? 75 : 0
+              } 
+              className="w-full" 
+            />
+            <p className="text-sm text-center text-muted-foreground">
+              {step === 'location' && locationMessage}
+              {step === 'frequency' && 'Detecting presence signal...'}
+              {step === 'submitting' && 'Marking attendance...'}
+            </p>
           </div>
         )}
 
-        {/* Submit Attendance Button */}
+        {/* Main Action Button */}
         <Button
-          onClick={handleMarkAttendance}
+          onClick={handleAttendanceProcess}
           className="w-full"
-          disabled={!locationVerified || !frequencyDetected || step === 'completed'}
+          disabled={step !== 'initial'}
         >
-          {step === 'submitting' ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Marking Attendance...
-            </>
-          ) : step === 'completed' ? (
-            <>
-              <CheckCircle className="mr-2 h-4 w-4" />
-              Attendance Marked Successfully
-            </>
-          ) : (
+          {step === 'initial' ? (
             <>
               <CheckCircle className="mr-2 h-4 w-4" />
               Mark Attendance
             </>
+          ) : step === 'location' ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Verifying Location...
+            </>
+          ) : step === 'frequency' ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Detecting Presence...
+            </>
+          ) : step === 'submitting' ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Marking Attendance...
+            </>
+          ) : (
+            <>
+              <CheckCircle className="mr-2 h-4 w-4" />
+              Attendance Marked
+            </>
           )}
         </Button>
+
+        {/* Debugging Info (optional) */}
+        {currentLocation && (
+          <div className="text-xs text-muted-foreground text-center">
+            Location: {currentLocation.latitude.toFixed(4)}, {currentLocation.longitude.toFixed(4)} 
+            (Accuracy: {currentLocation.accuracy.toFixed(2)}m)
+          </div>
+        )}
+        {detectedFrequency.freq > 0 && (
+          <div className="text-xs text-muted-foreground text-center">
+            Signal: {detectedFrequency.freq}Hz (Magnitude: {detectedFrequency.magnitude})
+          </div>
+        )}
       </CardContent>
     </Card>
   );

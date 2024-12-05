@@ -503,6 +503,7 @@ export async function getStudentsByTeacherAndCourse(
       username: student.user.username,
       email: student.user.email,
       branch: student.branch, // Assuming 'branch' is a field in user
+      id:student.id,
     }));
 
     return { students: simplifiedStudents };
@@ -626,7 +627,7 @@ export async function markAttendance(linkId: string, studentLatitude: number, st
       studentLongitude
     );
 
-    const DISTANCE_THRESHOLD = 100; // in meters
+    const DISTANCE_THRESHOLD = 5; // in meters
 
     // Determine attendance status and potential proxy
     let status: AttendanceStatus = AttendanceStatus.PRESENT;
@@ -637,12 +638,18 @@ export async function markAttendance(linkId: string, studentLatitude: number, st
         status = AttendanceStatus.ABSENT;
         isPotentialProxy = true;
       }
-
-      if(attendanceLink.frequency && (frequencyDetected<=attendanceLink.frequency+10 || frequencyDetected>=attendanceLink.frequency-10)){
+     
+      
+      if(attendanceLink.frequency && (frequencyDetected<=attendanceLink.frequency+5 && frequencyDetected>=attendanceLink.frequency-5)){
            status=AttendanceStatus.PRESENT;
            isPotentialProxy=false;
+      }else{
+        status=AttendanceStatus.ABSENT;
+        isPotentialProxy=true;
       }
-  
+      console.log(status);
+      console.log(isPotentialProxy);
+      console.log(frequencyDetected);
       // Mark attendance
       const attendanceRecord = await db.attendanceRecord.create({
         data: {
@@ -650,7 +657,7 @@ export async function markAttendance(linkId: string, studentLatitude: number, st
           courseId: attendanceLink.courseId,
           teacherId: attendanceLink.teacherId,
           attendanceLinkId: attendanceLink.id,
-          session: "2024", // You might want to make this dynamic
+          session: "2024", 
           status,
           date: new Date(),
           scanLocation: `${studentLatitude.toFixed(8)},${studentLongitude.toFixed(8)}`,
@@ -917,3 +924,119 @@ export const getAttendanceRecords = async (
     throw new Error("Unable to fetch attendance records.");
   }
 };
+
+export async function killAttendanceSession(attendanceLinkId: string) {
+  try {
+    // Update the attendance link to expire immediately
+    const updatedAttendanceLink = await db.attendanceLink.update({
+      where: { id: attendanceLinkId },
+      data: {
+        expiresAt: new Date(), // Set to current date and time
+      },
+      select: {
+        id: true,
+        courseId: true,
+        teacherId: true,
+      }
+    });
+
+    return {
+      success: true,
+      message: 'Attendance session has been ended.',
+      data: updatedAttendanceLink
+    };
+  } catch (error) {
+    console.error('Error ending attendance session:', error);
+    
+    // Handle different types of errors
+    if (error instanceof Error) {
+      return {
+        success: false,
+        message: error.message,
+        error: true
+      };
+    }
+
+    return {
+      success: false,
+      message: 'An unexpected error occurred while ending the attendance session.',
+      error: true
+    };
+  }
+}
+
+export async function getStudentAttendancePercentage(
+  studentId: string, 
+  courseId: string,
+  teacherId: string
+): Promise<{ 
+  totalSessions: number, 
+  presentSessions: number, 
+  attendancePercentage: number 
+}> {
+  try {
+    // Count total attendance records for the course and teacher
+    const totalSessions = await db.attendanceRecord.count({
+      where: {
+        courseId: courseId,
+        teacherId: teacherId
+      }
+    });
+
+    // Count sessions where the student was present
+    const presentSessions = await db.attendanceRecord.count({
+      where: {
+        studentId: studentId,
+        courseId: courseId,
+        status: 'PRESENT'
+      }
+    });
+
+    // Calculate attendance percentage
+    const attendancePercentage = totalSessions > 0 
+      ? Math.round((presentSessions / totalSessions) * 100) 
+      : 0;
+
+    return {
+      totalSessions,
+      presentSessions,
+      attendancePercentage
+    };
+  } catch (error) {
+    console.error('Error fetching attendance percentage:', error);
+    throw new Error('Failed to fetch attendance percentage');
+  }
+}
+
+export async function getTeacherByCourseAndId(studentId: string, courseId: string) {
+  try {
+    // Fetch the teacher based on teacherId and courseId
+    const teacher = await db.enrollment.findFirst({
+      where: {
+        studentId,
+        courseId,
+      },
+      include: {
+        teacher: true, // Include the teacher details
+      },
+    });
+
+    if (!teacher) {
+      return {
+        success: false,
+        message: 'No teacher found for the provided teacherId and courseId.',
+      };
+    }
+
+    return {
+      success: true,
+      teacher: teacher.teacher, // Return the teacher details
+    };
+  } catch (error) {
+    console.error('Error fetching teacher:', error);
+    return {
+      success: false,
+      message: 'An error occurred while fetching the teacher.',
+    };
+  }
+}
