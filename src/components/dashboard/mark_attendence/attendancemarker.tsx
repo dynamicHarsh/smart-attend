@@ -12,7 +12,7 @@ import { AttendanceStatus } from '@prisma/client';
 // Constants for audio processing
 const SAMPLE_RATE = 48000;
 const FFT_SIZE = 32768;
-const LOW_FREQ = 15999;  // Low end of the frequency range
+const LOW_FREQ = 18999;  // Low end of the frequency range
 const HIGH_FREQ = 19401; // High end of the frequency range
 const LISTENING_DURATION = 7000; // 5 seconds
 const MAX_LOCATION_TIME = 13000; // 15 seconds
